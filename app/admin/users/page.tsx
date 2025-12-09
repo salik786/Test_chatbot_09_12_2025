@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
 import UserManagementClient from './UserManagementClient';
 
@@ -6,7 +6,8 @@ type Profile = Database['public']['Tables']['profiles']['Row'];
 type Assistant = Database['public']['Tables']['assistants']['Row'];
 
 async function getUsers() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data: profiles, error } = await supabase
     .from('profiles')
@@ -22,7 +23,8 @@ async function getUsers() {
 }
 
 async function getUsersWithAssistants() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from('profiles')
@@ -44,7 +46,8 @@ async function getUsersWithAssistants() {
 }
 
 async function getAssistants() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data: assistants, error } = await supabase
     .from('assistants')

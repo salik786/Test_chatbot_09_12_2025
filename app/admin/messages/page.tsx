@@ -1,11 +1,12 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
 import MessagesViewerClient from './MessagesViewerClient';
 
 type Message = Database['public']['Tables']['messages']['Row'];
 
 async function getMessagesWithDetails() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data, error } = await supabase
     .from('messages')
@@ -26,7 +27,8 @@ async function getMessagesWithDetails() {
 }
 
 async function getUsers() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data: profiles } = await supabase
     .from('profiles')
@@ -37,7 +39,8 @@ async function getUsers() {
 }
 
 async function getAssistants() {
-  const supabase = await createClient();
+  // Use service role client to bypass RLS for admin operations
+  const supabase = createServiceClient();
 
   const { data: assistants } = await supabase
     .from('assistants')
