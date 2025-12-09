@@ -16,8 +16,8 @@ This document describes the fixes for two critical issues:
 - RLS policies potentially blocking auto-assignment
 
 **Fix Applied:**
-- Updated `supabase-setup.sql` to include proper RLS policies
 - Created diagnostic and fix scripts to identify and resolve issues
+- Scripts can manually assign assistants to users without assignments
 
 ### Issue 2: Admin Panel Not Showing Users/Messages
 
@@ -28,36 +28,37 @@ The RLS (Row Level Security) policy on the `profiles` table only allowed users t
 
 **Fix Applied:**
 - Updated admin panel to use `createServiceClient()` which bypasses RLS
-- Added RLS policy to allow admins to view all profiles
+- Service role client has full database access and bypasses ALL RLS policies
 - Updated both Users and Messages admin pages
+
+**Important Note:** An earlier version attempted to add an RLS policy for admin access, but this caused infinite recursion. The current fix uses service role client exclusively, which doesn't need RLS policies.
 
 ## Files Modified
 
 ### Core Fixes
 - `app/admin/users/page.tsx` - Now uses service role client
 - `app/admin/messages/page.tsx` - Now uses service role client
-- `supabase-setup.sql` - Added admin RLS policy for profiles
+- `supabase-setup.sql` - Removed problematic RLS policy
 
 ### New Tools
 - `scripts/diagnose-assistant-assignment.ts` - Diagnostic tool
 - `scripts/fix-assistant-assignment.ts` - Fix script for missing assignments
-- `supabase-rls-fix.sql` - SQL to add admin RLS policy
+- `supabase-rls-fix.sql` - SQL to drop problematic RLS policy
 
 ## How to Apply Fixes
 
-### 1. Apply Database Changes
+### 1. Apply Database Changes (IMPORTANT - If you already applied the previous version)
 
-Run the RLS fix in your Supabase SQL Editor:
+If you ran the old version and are getting "infinite recursion" errors, run this in Supabase SQL Editor:
 
-```bash
-# Option 1: Apply just the RLS fix
-cat supabase-rls-fix.sql
-# Copy and paste into Supabase SQL Editor
-
-# Option 2: Re-run the entire setup (if triggers are missing)
-cat supabase-setup.sql
-# Copy and paste into Supabase SQL Editor
+```sql
+-- This drops the problematic policy
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
 ```
+
+Or simply copy and paste the contents of `supabase-rls-fix.sql` into Supabase SQL Editor.
+
+**Note:** No RLS policy is needed for admin access because the admin panel uses service role client which bypasses ALL RLS policies.
 
 ### 2. Verify Environment Variables
 
@@ -135,24 +136,24 @@ npm run dev
 
 ### RLS Policy Structure
 
-The new policy allows admins to view all profiles:
+**Important:** Initially, a policy was created to allow admins to view all profiles, but this caused infinite recursion errors. The problem was:
 
 ```sql
+-- This causes infinite recursion - DO NOT USE
 CREATE POLICY "Admins can view all profiles"
   ON profiles FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM profiles p
+      SELECT 1 FROM profiles p  -- This queries profiles while checking profiles policy!
       WHERE p.id = auth.uid()
       AND p.is_admin = TRUE
     )
   );
 ```
 
-This policy:
-1. Checks if the current user (`auth.uid()`) exists in profiles
-2. Checks if that user has `is_admin = TRUE`
-3. If both are true, allows access to all profiles
+The issue: When you query `profiles` to check if someone is an admin, it triggers RLS policies on `profiles` again, creating infinite recursion.
+
+**Solution:** Use service role client (`createServiceClient()`) which bypasses ALL RLS policies. This is the correct approach for admin operations.
 
 ### Assistant Assignment Flow
 

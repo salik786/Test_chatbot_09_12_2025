@@ -22,19 +22,13 @@ CREATE POLICY "Users can view own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
 
-CREATE POLICY "Admins can view all profiles"
-  ON profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid()
-      AND p.is_admin = TRUE
-    )
-  );
-
 CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
   USING (auth.uid() = id);
+
+-- Note: Admin access is handled via service role client which bypasses RLS
+-- Do NOT create a policy that queries profiles table from within profiles policy
+-- as it causes infinite recursion
 
 -- Trigger function to auto-create profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
