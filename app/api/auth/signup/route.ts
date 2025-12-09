@@ -39,7 +39,12 @@ export async function POST(request: Request) {
     const isAdmin = email === process.env.ADMIN_EMAIL;
 
     // Use service client to bypass RLS for profile creation
-    const serviceClient = await createServiceClient();
+    const serviceClient = createServiceClient();
+
+    // Debug logging
+    console.log('Service role key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+    console.log('Service role key starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20));
+
     await createProfile(serviceClient, authData.user.id, email, isAdmin);
 
     const assistant = await getRandomAssistant(serviceClient);
