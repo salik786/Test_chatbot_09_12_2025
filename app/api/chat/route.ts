@@ -76,6 +76,7 @@ export async function POST(request: Request) {
     const run = await runAssistantStream(threadId, assistant.openai_assistant_id);
 
     let fullResponse = '';
+    let isJsonResponse = false;
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
@@ -91,22 +92,46 @@ export async function POST(request: Request) {
                 // Handle text content
                 if (content.type === 'text' && content.text?.value) {
                   const text = content.text.value;
-                  fullResponse += text;
-                  controller.enqueue(encoder.encode(text));
+
+                  // Check if this looks like a JSON response
+                  if (!fullResponse && text.trim().startsWith('{')) {
+                    isJsonResponse = true;
+                  }
+
+                  // For JSON responses, accumulate but don't stream deltas to avoid duplication
+                  if (isJsonResponse) {
+                    fullResponse += text;
+                  } else {
+                    // For plain text, stream normally
+                    fullResponse += text;
+                    controller.enqueue(encoder.encode(text));
+                  }
                 }
               }
             }
 
-            // Handle message completion (for JSON responses)
+            // Handle message completion (for JSON responses or final content)
             if (event.event === 'thread.message.completed') {
               const messageData = event.data;
               if (messageData.content && messageData.content.length > 0) {
                 const content = messageData.content[0];
 
-                // If we haven't streamed anything yet, get the full content
-                if (!fullResponse && content.type === 'text' && content.text?.value) {
-                  fullResponse = content.text.value;
-                  controller.enqueue(encoder.encode(fullResponse));
+                if (content.type === 'text' && content.text?.value) {
+                  // If we detected JSON but didn't get full response yet, use completed message
+                  if (isJsonResponse && !fullResponse) {
+                    fullResponse = content.text.value;
+                  }
+
+                  // If we haven't sent anything yet (JSON was accumulated), send it now
+                  if (isJsonResponse && fullResponse) {
+                    controller.enqueue(encoder.encode(fullResponse));
+                  }
+
+                  // If we somehow have no response at all, use the completed message
+                  if (!fullResponse) {
+                    fullResponse = content.text.value;
+                    controller.enqueue(encoder.encode(fullResponse));
+                  }
                 }
               }
             }
@@ -114,14 +139,27 @@ export async function POST(request: Request) {
             // Handle run completion
             if (event.event === 'thread.run.completed') {
               console.log('Run completed, full response length:', fullResponse.length);
+              console.log('Response type:', isJsonResponse ? 'JSON' : 'text');
 
               // Save assistant message to database
               if (fullResponse) {
+                // Parse JSON to extract just the "response" field for storage
+                let contentToSave = fullResponse;
+                try {
+                  const jsonContent = JSON.parse(fullResponse);
+                  if (jsonContent.response) {
+                    contentToSave = jsonContent.response;
+                  }
+                } catch {
+                  // Not JSON or parse failed, save as-is
+                  contentToSave = fullResponse;
+                }
+
                 await saveMessage(supabase, {
                   user_id: user.id,
                   assistant_id: assistant.id,
                   role: 'assistant',
-                  content: fullResponse,
+                  content: contentToSave,
                 });
               } else {
                 console.warn('Run completed but no response captured');

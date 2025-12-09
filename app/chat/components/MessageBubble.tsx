@@ -7,6 +7,20 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
+  // Parse JSON responses to extract the "response" field
+  let displayContent = message.content;
+  if (!isUser && message.content) {
+    try {
+      const jsonContent = JSON.parse(message.content);
+      if (jsonContent.response) {
+        displayContent = jsonContent.response;
+      }
+    } catch {
+      // If not JSON, display as-is
+      displayContent = message.content;
+    }
+  }
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div
@@ -19,7 +33,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         <div className="text-xs font-semibold mb-1 opacity-75">
           {isUser ? 'You' : 'Assistant'}
         </div>
-        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        <div className="whitespace-pre-wrap break-words">{displayContent}</div>
         <div className="text-xs mt-1 opacity-60">
           {new Date(message.timestamp).toLocaleTimeString([], {
             hour: '2-digit',

@@ -83,7 +83,32 @@ export default function ChatInterface({ assistantName }: ChatInterfaceProps) {
 
           const chunk = decoder.decode(value, { stream: true });
           fullMessage += chunk;
-          setStreamingMessage(fullMessage);
+
+          // Try to parse JSON and extract response field for display
+          let displayMessage = fullMessage;
+          try {
+            const jsonResponse = JSON.parse(fullMessage);
+            if (jsonResponse.response) {
+              displayMessage = jsonResponse.response;
+            }
+          } catch {
+            // If not valid JSON yet, display as-is (still streaming)
+            displayMessage = fullMessage;
+          }
+
+          setStreamingMessage(displayMessage);
+        }
+
+        // Parse final message for storage
+        let finalContent = fullMessage;
+        try {
+          const jsonResponse = JSON.parse(fullMessage);
+          if (jsonResponse.response) {
+            finalContent = jsonResponse.response;
+          }
+        } catch {
+          // If not JSON, use full message as-is
+          finalContent = fullMessage;
         }
 
         // Add complete assistant message
@@ -92,7 +117,7 @@ export default function ChatInterface({ assistantName }: ChatInterfaceProps) {
           user_id: '',
           assistant_id: '',
           role: 'assistant',
-          content: fullMessage,
+          content: finalContent,
           timestamp: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
