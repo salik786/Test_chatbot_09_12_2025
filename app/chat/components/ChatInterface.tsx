@@ -8,9 +8,10 @@ import LogoutButton from '@/components/ui/LogoutButton';
 
 interface ChatInterfaceProps {
   assistantName: string;
+  isAdmin?: boolean;
 }
 
-export default function ChatInterface({ assistantName }: ChatInterfaceProps) {
+export default function ChatInterface({ assistantName, isAdmin = false }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -140,7 +141,17 @@ export default function ChatInterface({ assistantName }: ChatInterfaceProps) {
           <h1 className="text-xl font-semibold text-gray-900">
             Chat with {assistantName}
           </h1>
-          <LogoutButton />
+          <div className="flex items-center space-x-4">
+            {isAdmin && (
+              <a
+                href="/admin"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Admin Panel
+              </a>
+            )}
+            <LogoutButton />
+          </div>
         </div>
       </div>
 

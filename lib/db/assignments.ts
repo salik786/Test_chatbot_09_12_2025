@@ -2,7 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 
 export async function getUserAssignment(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string
 ) {
   const { data, error } = await supabase
@@ -25,7 +25,7 @@ export async function getUserAssignment(
 }
 
 export async function assignAssistant(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   assistantId: string,
   assignedBy: string | null = null
@@ -45,7 +45,7 @@ export async function assignAssistant(
 }
 
 export async function updateUserAssignment(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   newAssistantId: string,
   adminId: string
@@ -59,7 +59,7 @@ export async function updateUserAssignment(
 }
 
 export async function getAssignmentCount(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   assistantId: string
 ) {
   const { count, error } = await supabase
@@ -72,7 +72,7 @@ export async function getAssignmentCount(
 }
 
 export async function updateThreadId(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   threadId: string
 ) {

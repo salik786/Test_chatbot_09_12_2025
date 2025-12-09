@@ -1,10 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
+import { createClient } from '@/lib/supabase/server';
 
 export async function getProfile(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string
-) {
+): Promise<Database['public']['Tables']['profiles']['Row'] | null> {
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
@@ -21,8 +22,13 @@ export async function getProfile(
   return data;
 }
 
+export async function getUserProfile(userId: string): Promise<Database['public']['Tables']['profiles']['Row'] | null> {
+  const supabase = await createClient();
+  return getProfile(supabase, userId);
+}
+
 export async function createProfile(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   email: string,
   isAdmin: boolean = false
@@ -42,7 +48,7 @@ export async function createProfile(
 }
 
 export async function updateProfile(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   updates: Database['public']['Tables']['profiles']['Update']
 ) {
@@ -58,7 +64,7 @@ export async function updateProfile(
 }
 
 export async function getAllProfiles(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   excludeAdmins: boolean = true
 ) {
   let query = supabase

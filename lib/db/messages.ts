@@ -2,7 +2,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 
 export async function getChatHistory(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   limit: number = 100
 ) {
@@ -18,7 +18,7 @@ export async function getChatHistory(
 }
 
 export async function getRecentMessages(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string,
   limit: number = 20
 ) {
@@ -34,7 +34,7 @@ export async function getRecentMessages(
 }
 
 export async function saveMessage(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   message: Database['public']['Tables']['messages']['Insert']
 ) {
   const { data, error } = await supabase
@@ -48,7 +48,7 @@ export async function saveMessage(
 }
 
 export async function getUserMessageCount(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   userId: string
 ) {
   const { count, error } = await supabase
