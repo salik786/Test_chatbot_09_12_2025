@@ -1,20 +1,14 @@
--- RLS Policy Fix for Admin Access
+-- FIX: Remove the problematic RLS policy that causes infinite recursion
 -- Run this SQL in your Supabase SQL Editor
 
--- This adds a policy to allow admins to view all profiles
--- The existing policy only allows users to view their own profile
+-- Drop the policy that causes infinite recursion
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
 
-CREATE POLICY IF NOT EXISTS "Admins can view all profiles"
-  ON profiles FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles p
-      WHERE p.id = auth.uid()
-      AND p.is_admin = TRUE
-    )
-  );
-
--- Verify the policies
+-- Verify the policy is removed
 SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual
 FROM pg_policies
 WHERE tablename = 'profiles';
+
+-- Note: Admin panel now uses createServiceClient() with service role key
+-- which bypasses ALL RLS policies, so we don't need a separate admin policy.
+-- The service role client has full database access.
