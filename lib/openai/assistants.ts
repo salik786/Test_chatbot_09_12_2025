@@ -28,6 +28,9 @@ export async function runAssistantStream(
 ) {
   const run = openai.beta.threads.runs.stream(threadId, {
     assistant_id: assistantId,
+    // Add additional instructions to satisfy JSON response format requirement
+    // This ensures the word "json" appears in the context when assistants are configured for JSON output
+    additional_instructions: "Please provide your response. If returning JSON, ensure it's well-formatted.",
   });
 
   return run;
