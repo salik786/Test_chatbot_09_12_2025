@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/types/database';
 
-export async function getAssistants(supabase: SupabaseClient<Database>) {
+export async function getAssistants(supabase: any) {
   const { data, error } = await supabase
     .from('assistants')
     .select('*')
@@ -11,7 +11,7 @@ export async function getAssistants(supabase: SupabaseClient<Database>) {
   return data;
 }
 
-export async function getActiveAssistants(supabase: SupabaseClient<Database>) {
+export async function getActiveAssistants(supabase: any) {
   const { data, error } = await supabase
     .from('assistants')
     .select('*')
@@ -23,7 +23,7 @@ export async function getActiveAssistants(supabase: SupabaseClient<Database>) {
 }
 
 export async function getAssistantById(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   id: string
 ) {
   const { data, error } = await supabase
@@ -37,7 +37,7 @@ export async function getAssistantById(
 }
 
 export async function getRandomAssistant(
-  supabase: SupabaseClient<Database>
+  supabase: any
 ) {
   const { data, error } = await supabase
     .from('assistants')
@@ -55,7 +55,7 @@ export async function getRandomAssistant(
 }
 
 export async function createAssistant(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   assistant: Database['public']['Tables']['assistants']['Insert']
 ) {
   const { data, error } = await supabase
@@ -69,7 +69,7 @@ export async function createAssistant(
 }
 
 export async function updateAssistant(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   id: string,
   updates: Database['public']['Tables']['assistants']['Update']
 ) {
@@ -85,7 +85,7 @@ export async function updateAssistant(
 }
 
 export async function deleteAssistant(
-  supabase: SupabaseClient<Database>,
+  supabase: any,
   id: string
 ) {
   const { error } = await supabase

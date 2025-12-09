@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/utils/auth';
 import { getUserAssignment } from '@/lib/db/assignments';
+import { getUserProfile } from '@/lib/db/users';
 import ChatInterface from './components/ChatInterface';
 
 export default async function ChatPage() {
@@ -13,6 +14,7 @@ export default async function ChatPage() {
 
   const supabase = await createClient();
   const assignment = await getUserAssignment(supabase, user.id);
+  const profile = await getUserProfile(user.id);
 
   if (!assignment || !assignment.assistant) {
     return (
@@ -27,5 +29,5 @@ export default async function ChatPage() {
     );
   }
 
-  return <ChatInterface assistantName={assignment.assistant.name} />;
+  return <ChatInterface assistantName={assignment.assistant.name} isAdmin={profile?.is_admin || false} />;
 }
