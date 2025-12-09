@@ -1,50 +1,31 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getProfile } from '@/lib/db/users';
+import { getCurrentUser } from '@/lib/utils/auth';
+import { getUserAssignment } from '@/lib/db/assignments';
+import ChatInterface from './components/ChatInterface';
 
 export default async function ChatPage() {
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     redirect('/login');
   }
 
-  const profile = await getProfile(supabase, user.id);
+  const supabase = await createClient();
+  const assignment = await getUserAssignment(supabase, user.id);
 
-  if (!profile) {
-    redirect('/login');
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Welcome to Chat
-          </h1>
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              You're successfully logged in as: <strong>{profile.email}</strong>
-            </p>
-            {profile.is_admin && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-4">
-                <p className="text-blue-800">
-                  🎉 You have admin access
-                </p>
-              </div>
-            )}
-            <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
-              <p className="text-yellow-800">
-                Chat interface coming soon...
-              </p>
-            </div>
-          </div>
+  if (!assignment || !assignment.assistant) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full p-8 bg-white rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">No Assistant Assigned</h2>
+          <p className="text-gray-600">
+            You don't have an assistant assigned yet. Please contact an administrator.
+          </p>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <ChatInterface assistantName={assignment.assistant.name} />;
 }
