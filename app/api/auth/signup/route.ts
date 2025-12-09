@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { createProfile } from '@/lib/db/users';
 import { getRandomAssistant } from '@/lib/db/assistants';
 import { assignAssistant } from '@/lib/db/assignments';
@@ -38,10 +38,12 @@ export async function POST(request: Request) {
 
     const isAdmin = email === process.env.ADMIN_EMAIL;
 
-    await createProfile(supabase, authData.user.id, email, isAdmin);
+    // Use service client to bypass RLS for profile creation
+    const serviceClient = await createServiceClient();
+    await createProfile(serviceClient, authData.user.id, email, isAdmin);
 
-    const assistant = await getRandomAssistant(supabase);
-    await assignAssistant(supabase, authData.user.id, assistant.id);
+    const assistant = await getRandomAssistant(serviceClient);
+    await assignAssistant(serviceClient, authData.user.id, assistant.id);
 
     return NextResponse.json({
       success: true,
