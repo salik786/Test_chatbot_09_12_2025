@@ -32,8 +32,7 @@ export interface Database {
           id: string;
           name: string;
           description: string | null;
-          model_id: string;
-          system_prompt: string;
+          openai_assistant_id: string;
           active: boolean;
           available_for_random_assignment: boolean;
           created_at: string;
@@ -43,8 +42,7 @@ export interface Database {
           id?: string;
           name: string;
           description?: string | null;
-          model_id: string;
-          system_prompt: string;
+          openai_assistant_id: string;
           active?: boolean;
           available_for_random_assignment?: boolean;
           created_at?: string;
@@ -54,8 +52,7 @@ export interface Database {
           id?: string;
           name?: string;
           description?: string | null;
-          model_id?: string;
-          system_prompt?: string;
+          openai_assistant_id?: string;
           active?: boolean;
           available_for_random_assignment?: boolean;
           created_at?: string;
@@ -67,6 +64,7 @@ export interface Database {
           id: string;
           user_id: string;
           assistant_id: string;
+          openai_thread_id: string | null;
           assigned_at: string;
           assigned_by: string | null;
         };
@@ -74,6 +72,7 @@ export interface Database {
           id?: string;
           user_id: string;
           assistant_id: string;
+          openai_thread_id?: string | null;
           assigned_at?: string;
           assigned_by?: string | null;
         };
@@ -81,6 +80,7 @@ export interface Database {
           id?: string;
           user_id?: string;
           assistant_id?: string;
+          openai_thread_id?: string | null;
           assigned_at?: string;
           assigned_by?: string | null;
         };

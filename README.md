@@ -1,6 +1,6 @@
 # AI Chat Platform
 
-A simple AI chat platform built with Next.js, Supabase, and OpenAI with assistant management and admin panel.
+A simple AI chat platform built with Next.js, Supabase, and OpenAI Assistants API with fine-tuned models and admin panel.
 
 ## Architecture
 
@@ -37,22 +37,31 @@ The chat system is now fully functional!
 
 3. **Chat API Routes**
    - `GET /api/chat/history` - Loads past conversations
-   - `POST /api/chat` - Sends messages with OpenAI streaming
-   - Full conversation context (20 recent messages)
-   - Automatic message persistence
+   - `POST /api/chat` - Sends messages with OpenAI Assistants API streaming
+   - Uses OpenAI Threads for persistent conversations
+   - Automatic message persistence to database
 
-4. **Features**
-   - ✅ Real-time streaming responses from OpenAI
+4. **OpenAI Assistants Integration**
+   - ✅ Uses OpenAI Assistants API (not Chat Completions)
+   - ✅ Supports fine-tuned models via assistants
+   - ✅ Per-user OpenAI threads for conversation context
+   - ✅ Automatic thread creation and management
+   - ✅ Real-time streaming responses
+
+5. **Features**
+   - ✅ Real-time streaming responses from OpenAI Assistants
+   - ✅ Fine-tuned model support (use your own assistants)
    - ✅ Chat history loading and persistence
-   - ✅ System prompts based on assigned assistant
+   - ✅ Per-user conversation threads
    - ✅ Auto-scroll to latest message
    - ✅ Loading indicators and typing animations
    - ✅ Error handling and validation
    - ✅ Keyboard shortcuts (Enter to send, Shift+Enter for new line)
 
-5. **Database Setup**
+6. **Database Setup**
    - `supabase-setup.sql` - Complete database setup script
-   - Pre-configured with 3 sample assistants
+   - Pre-configured with YOUR 3 OpenAI Assistant IDs
+   - Thread tracking per user
    - All RLS policies and indexes
 
 ## Setup Instructions
@@ -69,7 +78,8 @@ npm install
 2. Go to SQL Editor in your Supabase dashboard
 3. Copy and run the entire `supabase-setup.sql` file
    - This creates all tables with RLS policies
-   - Seeds 3 sample assistants (nav_edu, core_edu, base_edu)
+   - **Seeds YOUR 3 OpenAI Assistants** (nav_edu, core_edu, base_edu)
+   - Assistant IDs: asst_8U73byxV7wR65zuTiPUdDav7, asst_oxD6VwzWDq50mQMZPxtRs4MZ, asst_dqm6xw0NYdiIqu65rIQ2iGOW
 4. Copy your project URL and anon key from Settings > API
 
 ### 3. Configure Environment Variables

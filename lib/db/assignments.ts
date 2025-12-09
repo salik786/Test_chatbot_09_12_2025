@@ -70,3 +70,19 @@ export async function getAssignmentCount(
   if (error) throw error;
   return count || 0;
 }
+
+export async function updateThreadId(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  threadId: string
+) {
+  const { data, error } = await supabase
+    .from('user_assistant')
+    .update({ openai_thread_id: threadId })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}

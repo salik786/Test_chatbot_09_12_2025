@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/utils/auth';
-import { getUserAssignment } from '@/lib/db/assignments';
-import { getRecentMessages, saveMessage } from '@/lib/db/messages';
-import { openai } from '@/lib/openai/client';
+import { getUserAssignment, updateThreadId } from '@/lib/db/assignments';
+import { saveMessage } from '@/lib/db/messages';
+import { createThread, addMessageToThread, runAssistantStream } from '@/lib/openai/assistants';
 
 export async function POST(request: Request) {
   try {
@@ -38,30 +38,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get recent chat history for context
-    const recentMessages = await getRecentMessages(supabase, user.id, 20);
+    // Get or create OpenAI thread
+    let threadId = assignment.openai_thread_id;
 
-    // Build messages array for OpenAI
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      {
-        role: 'system',
-        content: assistant.system_prompt,
-      },
-    ];
-
-    // Add recent conversation history
-    for (const msg of recentMessages) {
-      messages.push({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      });
+    if (!threadId) {
+      // Create new thread for this user
+      threadId = await createThread();
+      await updateThreadId(supabase, user.id, threadId);
     }
 
-    // Add new user message
-    messages.push({
-      role: 'user',
-      content: message,
-    });
+    // Add user message to thread
+    await addMessageToThread(threadId, message);
 
     // Save user message to database
     await saveMessage(supabase, {
@@ -71,39 +58,48 @@ export async function POST(request: Request) {
       content: message,
     });
 
-    // Call OpenAI with streaming
-    const response = await openai.chat.completions.create({
-      model: assistant.model_id,
-      messages: messages,
-      stream: true,
-      temperature: 0.7,
-      max_tokens: 1000,
-    });
+    // Run assistant and stream response
+    const run = await runAssistantStream(threadId, assistant.openai_assistant_id);
 
-    // Create streaming response
-    const encoder = new TextEncoder();
     let fullResponse = '';
+    const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of response) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            if (content) {
-              fullResponse += content;
-              controller.enqueue(encoder.encode(content));
+          for await (const event of run) {
+            // Handle text deltas
+            if (event.event === 'thread.message.delta') {
+              const delta = event.data.delta;
+              if (delta.content && delta.content[0]?.type === 'text') {
+                const text = delta.content[0].text?.value || '';
+                if (text) {
+                  fullResponse += text;
+                  controller.enqueue(encoder.encode(text));
+                }
+              }
+            }
+
+            // Handle completion
+            if (event.event === 'thread.run.completed') {
+              // Save assistant message to database
+              if (fullResponse) {
+                await saveMessage(supabase, {
+                  user_id: user.id,
+                  assistant_id: assistant.id,
+                  role: 'assistant',
+                  content: fullResponse,
+                });
+              }
+              controller.close();
+            }
+
+            // Handle errors
+            if (event.event === 'thread.run.failed') {
+              console.error('Run failed:', event.data);
+              controller.error(new Error('Assistant run failed'));
             }
           }
-
-          // Save assistant message to database
-          await saveMessage(supabase, {
-            user_id: user.id,
-            assistant_id: assistant.id,
-            role: 'assistant',
-            content: fullResponse,
-          });
-
-          controller.close();
         } catch (error) {
           console.error('Streaming error:', error);
           controller.error(error);

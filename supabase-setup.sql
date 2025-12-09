@@ -1,4 +1,4 @@
--- AI Chat Platform - Supabase Database Setup
+-- AI Chat Platform - Supabase Database Setup with OpenAI Assistants
 -- Run this SQL in your Supabase SQL Editor to set up the database
 
 -- ============================================================================
@@ -27,15 +27,14 @@ CREATE POLICY "Users can update own profile"
   USING (auth.uid() = id);
 
 -- ============================================================================
--- 2. Create assistants table
+-- 2. Create assistants table (with OpenAI Assistant ID)
 -- ============================================================================
 
 CREATE TABLE assistants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE,
   description TEXT,
-  model_id TEXT NOT NULL,
-  system_prompt TEXT NOT NULL,
+  openai_assistant_id TEXT NOT NULL UNIQUE,  -- OpenAI Assistant ID (asst_xxx)
   active BOOLEAN DEFAULT TRUE,
   available_for_random_assignment BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -61,13 +60,14 @@ CREATE POLICY "Admins can manage assistants"
   );
 
 -- ============================================================================
--- 3. Create user_assistant table
+-- 3. Create user_assistant table (with OpenAI thread tracking)
 -- ============================================================================
 
 CREATE TABLE user_assistant (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   assistant_id UUID NOT NULL REFERENCES assistants(id) ON DELETE CASCADE,
+  openai_thread_id TEXT,  -- OpenAI Thread ID for this user's conversation
   assigned_at TIMESTAMPTZ DEFAULT NOW(),
   assigned_by UUID REFERENCES auth.users(id),
   UNIQUE(user_id)
@@ -79,6 +79,10 @@ ALTER TABLE user_assistant ENABLE ROW LEVEL SECURITY;
 -- Policies
 CREATE POLICY "Users can view own assignment"
   ON user_assistant FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own thread"
+  ON user_assistant FOR UPDATE
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Admins can manage assignments"
@@ -131,58 +135,29 @@ CREATE POLICY "Admins can view all messages"
   );
 
 -- ============================================================================
--- 5. Insert sample assistants
+-- 5. Insert your OpenAI Assistants
 -- ============================================================================
 
-INSERT INTO assistants (name, description, model_id, system_prompt, active, available_for_random_assignment) VALUES
+-- Replace with YOUR actual OpenAI Assistant IDs from Playground
+INSERT INTO assistants (name, description, openai_assistant_id, active, available_for_random_assignment) VALUES
 (
   'nav_edu',
   'Navigation Education Assistant',
-  'gpt-3.5-turbo',
-  'You are a friendly and patient navigation education assistant designed to help students learn about navigation concepts, map reading, and wayfinding skills.
-
-Your role is to:
-- Explain navigation concepts in simple, accessible language
-- Use examples and analogies to make learning engaging
-- Encourage students to think critically about spatial reasoning
-- Provide step-by-step guidance when explaining complex topics
-- Adapt your explanations based on the student''s level of understanding
-
-Keep responses concise (2-3 paragraphs) unless the student asks for more detail. Use a warm, encouraging tone and celebrate student progress.',
+  'asst_8U73byxV7wR65zuTiPUdDav7',  -- Your NEV assistant
   TRUE,
   TRUE
 ),
 (
   'core_edu',
   'Core Education Assistant',
-  'gpt-3.5-turbo',
-  'You are a comprehensive core education assistant focused on fundamental academic subjects including mathematics, science, language arts, and social studies.
-
-Your responsibilities:
-- Provide clear explanations of core academic concepts
-- Help students with homework and assignment questions
-- Break down complex problems into manageable steps
-- Offer practice problems and learning exercises
-- Connect concepts across different subject areas
-
-Maintain an encouraging and supportive tone. Ask clarifying questions to understand the student''s needs. Provide examples and real-world applications to reinforce learning.',
+  'asst_oxD6VwzWDq50mQMZPxtRs4MZ',  -- Your Core assistant
   TRUE,
   TRUE
 ),
 (
   'base_edu',
   'Base Education Assistant',
-  'gpt-3.5-turbo',
-  'You are a general-purpose educational assistant helping students with a wide range of learning needs and questions.
-
-Your approach:
-- Listen carefully to understand what the student needs help with
-- Provide accurate, age-appropriate information
-- Use simple language and avoid jargon unless necessary
-- Encourage curiosity and independent thinking
-- Suggest additional resources when appropriate
-
-Be patient, friendly, and non-judgmental. If you don''t know something, admit it honestly and help the student find the right resources.',
+  'asst_dqm6xw0NYdiIqu65rIQ2iGOW',  -- Your base assistant
   TRUE,
   TRUE
 );
@@ -199,4 +174,4 @@ Be patient, friendly, and non-judgmental. If you don''t know something, admit it
 -- 5. Run: npm run dev
 -- 6. Visit: http://localhost:3000
 
--- Your database is now ready with 3 sample assistants!
+-- Your database is now ready with your 3 OpenAI Assistants!
