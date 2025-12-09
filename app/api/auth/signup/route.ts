@@ -45,10 +45,23 @@ export async function POST(request: Request) {
     console.log('Service role key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
     console.log('Service role key starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20));
 
-    await createProfile(serviceClient, authData.user.id, email, isAdmin);
+    try {
+      await createProfile(serviceClient, authData.user.id, email, isAdmin);
+      console.log('✓ Profile created successfully');
+    } catch (profileError) {
+      console.error('Profile creation failed:', profileError);
+      throw new Error(`Failed to create profile: ${profileError}`);
+    }
 
-    const assistant = await getRandomAssistant(serviceClient);
-    await assignAssistant(serviceClient, authData.user.id, assistant.id);
+    try {
+      const assistant = await getRandomAssistant(serviceClient);
+      await assignAssistant(serviceClient, authData.user.id, assistant.id);
+      console.log('✓ Assistant assigned successfully');
+    } catch (assistantError) {
+      console.error('Assistant assignment failed:', assistantError);
+      // Don't fail signup if assistant assignment fails
+      console.warn('User created without assistant assignment');
+    }
 
     return NextResponse.json({
       success: true,
@@ -58,7 +71,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Signup error:', error);
     return NextResponse.json(
-      { error: 'An error occurred during signup' },
+      { error: error instanceof Error ? error.message : 'An error occurred during signup' },
       { status: 500 }
     );
   }

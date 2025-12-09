@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getProfile } from '@/lib/db/users';
+import { getUserAssignment } from '@/lib/db/assignments';
 
 export default async function ChatPage() {
   const supabase = await createClient();
@@ -18,6 +19,8 @@ export default async function ChatPage() {
   if (!profile) {
     redirect('/login');
   }
+
+  const assignment = await getUserAssignment(supabase, user.id);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -37,6 +40,29 @@ export default async function ChatPage() {
                 </p>
               </div>
             )}
+
+            {assignment ? (
+              <div className="bg-green-50 border border-green-200 rounded p-4">
+                <p className="text-green-800">
+                  ✓ Assistant assigned: <strong>{assignment.assistant.name}</strong>
+                </p>
+                {assignment.assistant.description && (
+                  <p className="text-green-700 text-sm mt-1">
+                    {assignment.assistant.description}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-orange-50 border border-orange-200 rounded p-4">
+                <p className="text-orange-800">
+                  ⚠ No Assistant Assigned
+                </p>
+                <p className="text-orange-700 text-sm mt-1">
+                  You don't have an assistant assigned yet. Please contact an administrator.
+                </p>
+              </div>
+            )}
+
             <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
               <p className="text-yellow-800">
                 Chat interface coming soon...
