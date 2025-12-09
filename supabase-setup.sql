@@ -26,6 +26,35 @@ CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
   USING (auth.uid() = id);
 
+-- Trigger function to auto-create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  admin_email TEXT;
+  is_admin_user BOOLEAN;
+BEGIN
+  -- Get admin email from user metadata (set during signup)
+  admin_email := NEW.raw_user_meta_data->>'admin_email';
+
+  -- Check if this user is the admin
+  is_admin_user := (admin_email IS NOT NULL AND NEW.email = admin_email);
+
+  INSERT INTO public.profiles (id, email, is_admin)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(is_admin_user, FALSE)
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to call the function
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 -- ============================================================================
 -- 2. Create assistants table (with OpenAI Assistant ID)
 -- ============================================================================
@@ -163,15 +192,53 @@ INSERT INTO assistants (name, description, openai_assistant_id, active, availabl
 );
 
 -- ============================================================================
+-- 6. Auto-assign assistant on profile creation
+-- ============================================================================
+
+-- Function to randomly assign an assistant to new users
+CREATE OR REPLACE FUNCTION public.auto_assign_assistant()
+RETURNS TRIGGER AS $$
+DECLARE
+  random_assistant_id UUID;
+BEGIN
+  -- Get a random active assistant that's available for random assignment
+  SELECT id INTO random_assistant_id
+  FROM assistants
+  WHERE active = TRUE
+    AND available_for_random_assignment = TRUE
+  ORDER BY RANDOM()
+  LIMIT 1;
+
+  -- Only assign if we found an assistant
+  IF random_assistant_id IS NOT NULL THEN
+    INSERT INTO user_assistant (user_id, assistant_id, assigned_by)
+    VALUES (NEW.id, random_assistant_id, NULL);
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to auto-assign assistant when profile is created
+DROP TRIGGER IF EXISTS on_profile_created ON profiles;
+CREATE TRIGGER on_profile_created
+  AFTER INSERT ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.auto_assign_assistant();
+
+-- ============================================================================
 -- Setup Complete!
 -- ============================================================================
 
 -- Next steps:
 -- 1. Copy your Supabase URL and keys to .env.local
 -- 2. Add your OpenAI API key to .env.local
--- 3. Set ADMIN_EMAIL to your email in .env.local
+-- 3. Set ADMIN_EMAIL to your email in .env.local (for admin detection)
 -- 4. Run: npm install
 -- 5. Run: npm run dev
 -- 6. Visit: http://localhost:3000
 
--- Your database is now ready with your 3 OpenAI Assistants!
+-- Your database is now ready with:
+-- ✓ Automatic profile creation on signup
+-- ✓ Automatic assistant assignment
+-- ✓ Your 3 OpenAI Assistants configured
+-- ✓ All RLS policies in place

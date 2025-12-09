@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { createProfile } from '@/lib/db/users';
-import { getRandomAssistant } from '@/lib/db/assistants';
-import { assignAssistant } from '@/lib/db/assignments';
+import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
-    const { email, password, fullName } = await request.json();
+    const { email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -17,9 +14,16 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
+    // Sign up the user - triggers will handle profile and assistant assignment
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          // Store admin email in auth metadata for trigger to check
+          admin_email: process.env.ADMIN_EMAIL,
+        },
+      },
     });
 
     if (authError) {
@@ -36,19 +40,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const isAdmin = email === process.env.ADMIN_EMAIL;
-
-    // Use service client to bypass RLS for profile creation
-    const serviceClient = createServiceClient();
-
-    // Debug logging
-    console.log('Service role key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-    console.log('Service role key starts with:', process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20));
-
-    await createProfile(serviceClient, authData.user.id, email, isAdmin);
-
-    const assistant = await getRandomAssistant(serviceClient);
-    await assignAssistant(serviceClient, authData.user.id, assistant.id);
+    // Wait a moment for triggers to complete
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     return NextResponse.json({
       success: true,

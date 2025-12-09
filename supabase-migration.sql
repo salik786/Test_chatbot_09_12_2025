@@ -49,6 +49,70 @@ FROM user_assistant ua
 JOIN profiles p ON p.id = ua.user_id
 JOIN assistants a ON a.id = ua.assistant_id;
 
+-- Step 7: Add automatic profile creation trigger
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+  admin_email TEXT;
+  is_admin_user BOOLEAN;
+BEGIN
+  -- Get admin email from user metadata (set during signup)
+  admin_email := NEW.raw_user_meta_data->>'admin_email';
+
+  -- Check if this user is the admin
+  is_admin_user := (admin_email IS NOT NULL AND NEW.email = admin_email);
+
+  INSERT INTO public.profiles (id, email, is_admin)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(is_admin_user, FALSE)
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Step 8: Add automatic assistant assignment trigger
+CREATE OR REPLACE FUNCTION public.auto_assign_assistant()
+RETURNS TRIGGER AS $$
+DECLARE
+  random_assistant_id UUID;
+BEGIN
+  -- Get a random active assistant that's available for random assignment
+  SELECT id INTO random_assistant_id
+  FROM assistants
+  WHERE active = TRUE
+    AND available_for_random_assignment = TRUE
+  ORDER BY RANDOM()
+  LIMIT 1;
+
+  -- Only assign if we found an assistant
+  IF random_assistant_id IS NOT NULL THEN
+    INSERT INTO user_assistant (user_id, assistant_id, assigned_by)
+    VALUES (NEW.id, random_assistant_id, NULL);
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_profile_created ON profiles;
+CREATE TRIGGER on_profile_created
+  AFTER INSERT ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.auto_assign_assistant();
+
 -- ============================================================================
 -- Done! Your database is now ready for OpenAI Assistants API
 -- ============================================================================
+
+-- Features enabled:
+-- ✓ OpenAI Assistant IDs configured
+-- ✓ Thread tracking per user
+-- ✓ Automatic profile creation on signup
+-- ✓ Automatic assistant assignment
+-- ✓ All data preserved
