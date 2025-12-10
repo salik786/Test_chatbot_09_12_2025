@@ -8,13 +8,12 @@ async function getMessagesWithDetails() {
   // Use service role client to bypass RLS for admin operations
   const supabase = createServiceClient();
 
-  // Note: messages.user_id references auth.users(id), and profiles.id also references auth.users(id)
-  // So we join profiles using the user_id field directly
+  // After schema fix, messages.user_id now properly references profiles(id)
   const { data, error } = await supabase
     .from('messages')
     .select(`
       *,
-      profiles!user_id(email, full_name),
+      profiles(email, full_name),
       assistants(name)
     `)
     .order('timestamp', { ascending: false })

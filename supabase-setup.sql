@@ -98,11 +98,11 @@ CREATE POLICY "Admins can manage assistants"
 
 CREATE TABLE user_assistant (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   assistant_id UUID NOT NULL REFERENCES assistants(id) ON DELETE CASCADE,
   openai_thread_id TEXT,  -- OpenAI Thread ID for this user's conversation
   assigned_at TIMESTAMPTZ DEFAULT NOW(),
-  assigned_by UUID REFERENCES auth.users(id),
+  assigned_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   UNIQUE(user_id)
 );
 
@@ -134,7 +134,7 @@ CREATE POLICY "Admins can manage assignments"
 
 CREATE TABLE messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   assistant_id UUID NOT NULL REFERENCES assistants(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   content TEXT NOT NULL,
