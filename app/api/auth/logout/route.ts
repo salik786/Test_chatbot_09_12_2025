@@ -6,16 +6,11 @@ export async function POST() {
     const supabase = await createClient();
     await supabase.auth.signOut();
 
-    return NextResponse.json({
-      success: true,
-      message: 'Logged out successfully',
-      redirectTo: '/login',
-    });
+    // Redirect to login page instead of returning JSON
+    return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
   } catch (error) {
     console.error('Logout error:', error);
-    return NextResponse.json(
-      { error: 'An error occurred during logout' },
-      { status: 500 }
-    );
+    // Even if there's an error, redirect to login
+    return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'));
   }
 }

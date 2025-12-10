@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
@@ -46,12 +47,15 @@ export async function POST(request: Request) {
 
     console.log('User created in auth.users:', authData.user.id);
 
-    // Wait for triggers to complete (increased timeout for reliability)
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Wait for triggers to complete
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Use service client to verify (bypasses RLS)
+    const serviceSupabase = createServiceClient();
 
     // Verify profile and assignment were created
     console.log('Verifying profile creation...');
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await serviceSupabase
       .from('profiles')
       .select('id, email, is_admin')
       .eq('id', authData.user.id)
@@ -59,35 +63,39 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error('Profile verification error:', profileError);
-      // Profile might not exist yet, but this is not necessarily fatal
-      // The trigger should have created it, but there might be a delay
     } else {
       console.log('Profile verified:', profile);
     }
 
     // Verify assistant assignment
     console.log('Verifying assistant assignment...');
-    const { data: assignment, error: assignmentError } = await supabase
+    const { data: assignment, error: assignmentError } = await serviceSupabase
       .from('user_assistant')
-      .select('id, assistant_id')
+      .select('id, assistant_id, assistants(name)')
       .eq('user_id', authData.user.id)
       .single();
 
     if (assignmentError) {
       console.error('Assignment verification error:', assignmentError);
-      // Assignment might not exist yet, log but continue
+      console.error('Assignment error details:', JSON.stringify(assignmentError, null, 2));
     } else {
       console.log('Assistant assignment verified:', assignment);
     }
 
+    // Sign out the user - they need to log in manually
+    await supabase.auth.signOut();
+    console.log('User signed out - must log in manually');
+
     return NextResponse.json({
       success: true,
-      message: 'Account created successfully',
-      redirectTo: '/chat',
+      message: 'Account created successfully. Please sign in.',
+      redirectTo: '/login',
+      showSuccess: true,
       debug: {
         userId: authData.user.id,
         profileCreated: !!profile,
         assignmentCreated: !!assignment,
+        assistantName: assignment?.assistants?.name || 'None',
       },
     });
   } catch (error) {
