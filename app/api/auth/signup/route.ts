@@ -69,17 +69,51 @@ export async function POST(request: Request) {
 
     // Verify assistant assignment
     console.log('Verifying assistant assignment...');
-    const { data: assignment, error: assignmentError } = await serviceSupabase
+    let { data: assignment, error: assignmentError } = await serviceSupabase
       .from('user_assistant')
       .select('id, assistant_id, assistants(name)')
       .eq('user_id', authData.user.id)
       .single();
 
-    if (assignmentError) {
-      console.error('Assignment verification error:', assignmentError);
-      console.error('Assignment error details:', JSON.stringify(assignmentError, null, 2));
+    // FALLBACK: If trigger didn't create assignment, create it manually
+    if (assignmentError || !assignment) {
+      console.warn('⚠️ Trigger did not create assignment. Creating manually...');
+
+      // Get a random available assistant
+      const { data: availableAssistant, error: assistantError } = await serviceSupabase
+        .from('assistants')
+        .select('id, name')
+        .eq('active', true)
+        .eq('available_for_random_assignment', true)
+        .limit(1);
+
+      if (assistantError || !availableAssistant || availableAssistant.length === 0) {
+        console.error('❌ No assistants available:', assistantError);
+      } else {
+        const selectedAssistant = availableAssistant[0];
+        console.log('📌 Manually assigning assistant:', selectedAssistant.name);
+
+        // Manually insert the assignment
+        const { data: newAssignment, error: insertError } = await serviceSupabase
+          .from('user_assistant')
+          .insert({
+            user_id: authData.user.id,
+            assistant_id: selectedAssistant.id,
+            assigned_by: null,
+            assigned_at: new Date().toISOString(),
+          })
+          .select('id, assistant_id, assistants(name)')
+          .single();
+
+        if (insertError) {
+          console.error('❌ Failed to manually assign assistant:', insertError);
+        } else {
+          console.log('✅ Successfully assigned assistant manually:', newAssignment);
+          assignment = newAssignment;
+        }
+      }
     } else {
-      console.log('Assistant assignment verified:', assignment);
+      console.log('✅ Assistant assignment verified (trigger worked):', assignment);
     }
 
     // Sign out the user - they need to log in manually
