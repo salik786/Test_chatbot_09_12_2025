@@ -34,9 +34,28 @@ export async function createClient() {
 }
 
 export function createServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl) {
+    console.error('❌ NEXT_PUBLIC_SUPABASE_URL is not set!');
+    throw new Error('NEXT_PUBLIC_SUPABASE_URL is required');
+  }
+
+  if (!serviceRoleKey) {
+    console.error('❌ SUPABASE_SERVICE_ROLE_KEY is not set!');
+    console.error('This is required for admin operations to bypass RLS.');
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
+  }
+
+  console.log('✅ Creating service role client with:', {
+    url: supabaseUrl,
+    keyPrefix: serviceRoleKey.substring(0, 20) + '...',
+  });
+
   return createSupabaseClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     {
       auth: {
         autoRefreshToken: false,
