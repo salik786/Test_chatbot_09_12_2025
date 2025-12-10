@@ -26,6 +26,7 @@ async function getUsersWithAssistants() {
   // Use service role client to bypass RLS for admin operations
   const supabase = createServiceClient();
 
+  console.log('Fetching users with assistants...');
   const { data, error } = await supabase
     .from('profiles')
     .select(`
@@ -39,10 +40,12 @@ async function getUsersWithAssistants() {
 
   if (error) {
     console.error('Error fetching users with assistants:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     return [];
   }
 
-  return data;
+  console.log(`Successfully fetched ${data?.length || 0} users`);
+  return data || [];
 }
 
 async function getAssistants() {
@@ -67,6 +70,11 @@ export default async function UsersPage() {
   const users = await getUsersWithAssistants();
   const assistants = await getAssistants();
 
+  console.log('Admin Users Page - Rendering with:', {
+    userCount: users.length,
+    assistantCount: assistants.length,
+  });
+
   return (
     <div className="px-4 sm:px-0">
       <div className="sm:flex sm:items-center">
@@ -77,6 +85,14 @@ export default async function UsersPage() {
           </p>
         </div>
       </div>
+
+      {users.length === 0 && (
+        <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-yellow-800">
+            No users found. Check server console for errors or ensure users exist in the database.
+          </p>
+        </div>
+      )}
 
       <UserManagementClient users={users} assistants={assistants} />
     </div>
