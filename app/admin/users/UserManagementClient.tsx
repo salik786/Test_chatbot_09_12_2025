@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Database } from '@/types/database';
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -20,6 +20,18 @@ interface UserWithAssistant extends Profile {
 interface Props {
   users: UserWithAssistant[];
   assistants: Assistant[];
+}
+
+// Client-side date component to avoid hydration errors
+function ClientDateDisplay({ date }: { date: string }) {
+  const [formattedDate, setFormattedDate] = useState('');
+
+  useEffect(() => {
+    setFormattedDate(new Date(date).toLocaleDateString());
+  }, [date]);
+
+  if (!formattedDate) return <span>Loading...</span>;
+  return <span>{formattedDate}</span>;
 }
 
 export default function UserManagementClient({ users: initialUsers, assistants }: Props) {
@@ -199,7 +211,7 @@ export default function UserManagementClient({ users: initialUsers, assistants }
                     </select>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    <ClientDateDisplay date={user.created_at} />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
