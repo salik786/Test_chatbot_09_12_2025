@@ -35,7 +35,7 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
               placeholder="Type your message..."
               disabled={disabled}
               rows={1}
-              className="w-full resize-none border-2 border-purple-200 rounded-2xl px-5 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:border-purple-300"
+              className="w-full resize-none border-2 border-purple-200 rounded-2xl px-5 py-3 pr-12 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:border-purple-300 bg-white"
               style={{
                 minHeight: '52px',
                 maxHeight: '200px',
