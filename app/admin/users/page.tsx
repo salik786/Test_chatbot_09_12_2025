@@ -26,22 +26,7 @@ async function getUsersWithAssistants() {
   // Use service role client to bypass RLS for admin operations
   const supabase = createServiceClient();
 
-  console.log('Fetching users with assistants...');
-
-  // First, test if we can fetch profiles at all
-  const { data: testProfiles, error: testError } = await supabase
-    .from('profiles')
-    .select('id, email, is_admin')
-    .limit(5);
-
-  console.log('Test query - profiles only:', {
-    count: testProfiles?.length || 0,
-    error: testError,
-    sample: testProfiles?.[0]
-  });
-
-  // Now try the full query with relationships
-  // Use the specific relationship hint to avoid ambiguity
+  // Query profiles with relationships using specific relationship hint to avoid ambiguity
   const { data, error } = await supabase
     .from('profiles')
     .select(`
@@ -55,17 +40,14 @@ async function getUsersWithAssistants() {
 
   if (error) {
     console.error('Error fetching users with assistants:', error);
-    console.error('Error details:', JSON.stringify(error, null, 2));
 
     // If relationship query fails, fall back to simple query
-    console.log('Falling back to simple profiles query...');
     const { data: simpleProfiles } = await supabase
       .from('profiles')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (simpleProfiles && simpleProfiles.length > 0) {
-      console.log(`Found ${simpleProfiles.length} profiles without relationships`);
       // Transform to expected format with empty user_assistant
       return simpleProfiles.map(p => ({ ...p, user_assistant: [] }));
     }
@@ -73,7 +55,6 @@ async function getUsersWithAssistants() {
     return [];
   }
 
-  console.log(`Successfully fetched ${data?.length || 0} users with relationships`);
   return data || [];
 }
 
@@ -98,11 +79,6 @@ async function getAssistants() {
 export default async function UsersPage() {
   const users = await getUsersWithAssistants();
   const assistants = await getAssistants();
-
-  console.log('Admin Users Page - Rendering with:', {
-    userCount: users.length,
-    assistantCount: assistants.length,
-  });
 
   return (
     <div className="px-4 sm:px-0">

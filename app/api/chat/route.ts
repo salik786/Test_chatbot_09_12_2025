@@ -8,7 +8,7 @@ import { createThread, addMessageToThread, runAssistantStream } from '@/lib/open
 export async function POST(request: Request) {
   try {
     const user = await requireAuth();
-    const { message } = await request.json();
+    const { message, conversationId } = await request.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -47,18 +47,65 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('Using assistant:', assistant.name, assistant.openai_assistant_id);
+    // Get or create conversation
+    let conversation;
+    if (conversationId) {
+      // Use existing conversation
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .eq('user_id', user.id)
+        .single();
 
-    // Get or create OpenAI thread
-    let threadId = assignment.openai_thread_id;
+      if (error || !data) {
+        return NextResponse.json(
+          { error: 'Conversation not found' },
+          { status: 404 }
+        );
+      }
+      conversation = data;
+    } else {
+      // Get most recent conversation or create new one
+      const { data: recentConv } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (recentConv) {
+        conversation = recentConv;
+      } else {
+        // Create first conversation
+        const { data: newConv, error: createError } = await supabase
+          .from('conversations')
+          .insert({
+            user_id: user.id,
+            assistant_id: assistant.id,
+            title: 'New Conversation',
+          })
+          .select()
+          .single();
+
+        if (createError || !newConv) {
+          throw new Error('Failed to create conversation');
+        }
+        conversation = newConv;
+      }
+    }
+
+    // Get or create OpenAI thread for this conversation
+    let threadId = conversation.openai_thread_id;
 
     if (!threadId) {
-      console.log('Creating new thread for user:', user.id);
       threadId = await createThread();
-      await updateThreadId(supabase, user.id, threadId);
-      console.log('Thread created:', threadId);
-    } else {
-      console.log('Using existing thread:', threadId);
+      // Update conversation with thread ID
+      await supabase
+        .from('conversations')
+        .update({ openai_thread_id: threadId })
+        .eq('id', conversation.id);
     }
 
     // Add user message to thread
@@ -68,6 +115,7 @@ export async function POST(request: Request) {
     await saveMessage(supabase, {
       user_id: user.id,
       assistant_id: assistant.id,
+      conversation_id: conversation.id,
       role: 'user',
       content: message,
     });
@@ -138,9 +186,6 @@ export async function POST(request: Request) {
 
             // Handle run completion
             if (event.event === 'thread.run.completed') {
-              console.log('Run completed, full response length:', fullResponse.length);
-              console.log('Response type:', isJsonResponse ? 'JSON' : 'text');
-
               // Save assistant message to database
               if (fullResponse) {
                 // Parse JSON to extract just the "response" field for storage
@@ -158,6 +203,7 @@ export async function POST(request: Request) {
                 await saveMessage(supabase, {
                   user_id: user.id,
                   assistant_id: assistant.id,
+                  conversation_id: conversation.id,
                   role: 'assistant',
                   content: contentToSave,
                 });
@@ -194,15 +240,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Chat error:', error);
-
-    // Log more details for debugging
-    if (error instanceof Error) {
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
-    }
 
     return NextResponse.json(
       { error: 'An error occurred while processing your message' },

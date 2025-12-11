@@ -85,11 +85,41 @@ export interface Database {
           assigned_by?: string | null;
         };
       };
+      conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          assistant_id: string;
+          openai_thread_id: string | null;
+          title: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          assistant_id: string;
+          openai_thread_id?: string | null;
+          title?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          assistant_id?: string;
+          openai_thread_id?: string | null;
+          title?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       messages: {
         Row: {
           id: string;
           user_id: string;
           assistant_id: string;
+          conversation_id: string | null;
           role: 'user' | 'assistant';
           content: string;
           timestamp: string;
@@ -98,6 +128,7 @@ export interface Database {
           id?: string;
           user_id: string;
           assistant_id: string;
+          conversation_id?: string | null;
           role: 'user' | 'assistant';
           content: string;
           timestamp?: string;
@@ -106,6 +137,7 @@ export interface Database {
           id?: string;
           user_id?: string;
           assistant_id?: string;
+          conversation_id?: string | null;
           role?: 'user' | 'assistant';
           content?: string;
           timestamp?: string;
