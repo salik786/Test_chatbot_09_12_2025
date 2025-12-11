@@ -44,14 +44,8 @@ export function createServiceClient() {
 
   if (!serviceRoleKey) {
     console.error('❌ SUPABASE_SERVICE_ROLE_KEY is not set!');
-    console.error('This is required for admin operations to bypass RLS.');
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
   }
-
-  console.log('✅ Creating service role client with:', {
-    url: supabaseUrl,
-    keyPrefix: serviceRoleKey.substring(0, 20) + '...',
-  });
 
   return createSupabaseClient<Database>(
     supabaseUrl,

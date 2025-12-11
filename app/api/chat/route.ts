@@ -47,18 +47,12 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('Using assistant:', assistant.name, assistant.openai_assistant_id);
-
     // Get or create OpenAI thread
     let threadId = assignment.openai_thread_id;
 
     if (!threadId) {
-      console.log('Creating new thread for user:', user.id);
       threadId = await createThread();
       await updateThreadId(supabase, user.id, threadId);
-      console.log('Thread created:', threadId);
-    } else {
-      console.log('Using existing thread:', threadId);
     }
 
     // Add user message to thread
@@ -138,9 +132,6 @@ export async function POST(request: Request) {
 
             // Handle run completion
             if (event.event === 'thread.run.completed') {
-              console.log('Run completed, full response length:', fullResponse.length);
-              console.log('Response type:', isJsonResponse ? 'JSON' : 'text');
-
               // Save assistant message to database
               if (fullResponse) {
                 // Parse JSON to extract just the "response" field for storage
@@ -194,15 +185,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Chat error:', error);
-
-    // Log more details for debugging
-    if (error instanceof Error) {
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name,
-      });
-    }
 
     return NextResponse.json(
       { error: 'An error occurred while processing your message' },
