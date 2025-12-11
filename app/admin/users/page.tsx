@@ -41,11 +41,12 @@ async function getUsersWithAssistants() {
   });
 
   // Now try the full query with relationships
+  // Use the specific relationship hint to avoid ambiguity
   const { data, error } = await supabase
     .from('profiles')
     .select(`
       *,
-      user_assistant(
+      user_assistant!user_assistant_user_id_fkey(
         assistant_id,
         assistants(id, name, openai_assistant_id)
       )

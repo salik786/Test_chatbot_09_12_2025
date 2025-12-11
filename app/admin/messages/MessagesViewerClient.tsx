@@ -67,6 +67,21 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
   const [selectedRole, setSelectedRole] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'conversation'>('conversation');
+  const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  const toggleConversation = (key: string) => {
+    setExpandedConversations(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const filteredMessages = useMemo(() => {
     return initialMessages.filter(message => {
@@ -109,6 +124,15 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
       (a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     );
   }, [filteredMessages]);
+
+  // Paginate conversations
+  const paginatedConversations = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return conversations.slice(start, end);
+  }, [conversations, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(conversations.length / itemsPerPage);
 
   return (
     <div className="mt-8">
@@ -200,86 +224,182 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
             </div>
           </div>
 
-          <div className="mt-4 text-sm text-gray-500">
-            {viewMode === 'conversation'
-              ? `Showing ${conversations.length} conversations with ${filteredMessages.length} total messages`
-              : `Showing ${filteredMessages.length} of ${initialMessages.length} messages`
-            }
+          <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+            <div>
+              {viewMode === 'conversation'
+                ? `Showing ${paginatedConversations.length} of ${conversations.length} conversations (${filteredMessages.length} total messages)`
+                : `Showing ${filteredMessages.length} of ${initialMessages.length} messages`
+              }
+            </div>
+            {viewMode === 'conversation' && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="items-per-page" className="text-sm">Items per page:</label>
+                <select
+                  id="items-per-page"
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Messages Display */}
       {viewMode === 'conversation' ? (
-        <div className="space-y-6">
-          {conversations.length === 0 ? (
-            <div className="bg-white shadow sm:rounded-lg px-6 py-12 text-center text-gray-500">
-              No conversations found matching your filters.
-            </div>
-          ) : (
-            conversations.map((conversation, idx) => (
-              <div key={`${conversation.userId}-${conversation.assistantName}`} className="bg-white shadow sm:rounded-lg overflow-hidden">
-                {/* Conversation Header */}
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {conversation.userEmail}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        with {conversation.assistantName} • {conversation.messages.length} messages
-                      </p>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <ClientDateDisplay date={conversation.lastMessageTime} />
-                    </div>
-                  </div>
-                </div>
+        <>
+          <div className="space-y-4">
+            {paginatedConversations.length === 0 ? (
+              <div className="bg-white/80 backdrop-blur-lg shadow-lg sm:rounded-2xl px-6 py-12 text-center text-gray-500 border border-purple-100">
+                No conversations found matching your filters.
+              </div>
+            ) : (
+              paginatedConversations.map((conversation) => {
+                const conversationKey = `${conversation.userId}-${conversation.assistantName}`;
+                const isExpanded = expandedConversations.has(conversationKey);
 
-                {/* Conversation Messages */}
-                <div className="divide-y divide-gray-100">
-                  {conversation.messages
-                    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-                    .map((message) => (
-                      <div
-                        key={message.id}
-                        className={`px-6 py-4 ${
-                          message.role === 'user' ? 'bg-blue-50' : 'bg-white'
-                        }`}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <span
-                              className={`inline-flex items-center justify-center h-8 w-8 rounded-full ${
-                                message.role === 'user'
-                                  ? 'bg-blue-500 text-white'
-                                  : 'bg-green-500 text-white'
-                              }`}
-                            >
-                              {message.role === 'user' ? 'U' : 'A'}
-                            </span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="text-sm font-medium text-gray-900">
-                                {message.role === 'user' ? 'User' : message.assistants?.name}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                <ClientDateDisplay date={message.timestamp} />
-                              </p>
-                            </div>
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-                              {message.content}
+                return (
+                  <div key={conversationKey} className="bg-white/80 backdrop-blur-lg shadow-lg sm:rounded-2xl overflow-hidden border border-purple-100">
+                    {/* Conversation Header - Clickable */}
+                    <button
+                      onClick={() => toggleConversation(conversationKey)}
+                      className="w-full bg-gradient-to-r from-purple-50 to-blue-50 px-6 py-4 border-b border-purple-100 hover:from-purple-100 hover:to-blue-100 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 text-left">
+                          <svg
+                            className={`h-5 w-5 text-purple-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {conversation.userEmail}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                              with {conversation.assistantName} • {conversation.messages.length} messages
                             </p>
                           </div>
                         </div>
+                        <div className="text-sm text-gray-500 text-right">
+                          <ClientDateDisplay date={conversation.lastMessageTime} />
+                        </div>
                       </div>
-                    ))}
-                </div>
+                    </button>
+
+                    {/* Conversation Messages - Collapsible */}
+                    {isExpanded && (
+                      <div className="divide-y divide-gray-100">
+                        {conversation.messages
+                          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                          .map((message) => (
+                            <div
+                              key={message.id}
+                              className={`px-6 py-4 ${
+                                message.role === 'user' ? 'bg-blue-50/50' : 'bg-white'
+                              }`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className="flex-shrink-0">
+                                  <span
+                                    className={`inline-flex items-center justify-center h-8 w-8 rounded-full ${
+                                      message.role === 'user'
+                                        ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white'
+                                        : 'bg-gradient-to-br from-green-500 to-teal-600 text-white'
+                                    }`}
+                                  >
+                                    {message.role === 'user' ? 'U' : 'A'}
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-sm font-medium text-gray-900">
+                                      {message.role === 'user' ? 'User' : message.assistants?.name}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      <ClientDateDisplay date={message.timestamp} />
+                                    </p>
+                                  </div>
+                                  <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
+                                    {message.content}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between bg-white/80 backdrop-blur-lg px-6 py-4 rounded-2xl shadow-lg border border-purple-100">
+              <div className="text-sm text-gray-700">
+                Page {currentPage} of {totalPages}
               </div>
-            ))
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                >
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                          currentPage === pageNum
+                            ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           )}
-        </div>
+        </>
       ) : (
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
           <div className="divide-y divide-gray-200">
