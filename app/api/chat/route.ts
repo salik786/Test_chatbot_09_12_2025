@@ -125,6 +125,7 @@ export async function POST(request: Request) {
 
     let fullResponse = '';
     let isJsonResponse = false;
+    let messageSent = false; // Track if we've already sent the message
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
@@ -146,41 +147,38 @@ export async function POST(request: Request) {
                     isJsonResponse = true;
                   }
 
-                  // For JSON responses, accumulate but don't stream deltas to avoid duplication
-                  if (isJsonResponse) {
-                    fullResponse += text;
-                  } else {
-                    // For plain text, stream normally
-                    fullResponse += text;
+                  // Accumulate the response
+                  fullResponse += text;
+
+                  // For plain text responses, stream immediately
+                  // For JSON responses, wait until we have the complete message
+                  if (!isJsonResponse && !messageSent) {
                     controller.enqueue(encoder.encode(text));
                   }
                 }
               }
             }
 
-            // Handle message completion (for JSON responses or final content)
+            // Handle message completion
             if (event.event === 'thread.message.completed') {
               const messageData = event.data;
-              if (messageData.content && messageData.content.length > 0) {
+
+              // If we haven't accumulated anything from deltas, get it from completed message
+              if (!fullResponse && messageData.content && messageData.content.length > 0) {
                 const content = messageData.content[0];
-
                 if (content.type === 'text' && content.text?.value) {
-                  // If we detected JSON but didn't get full response yet, use completed message
-                  if (isJsonResponse && !fullResponse) {
-                    fullResponse = content.text.value;
-                  }
-
-                  // If we haven't sent anything yet (JSON was accumulated), send it now
-                  if (isJsonResponse && fullResponse) {
-                    controller.enqueue(encoder.encode(fullResponse));
-                  }
-
-                  // If we somehow have no response at all, use the completed message
-                  if (!fullResponse) {
-                    fullResponse = content.text.value;
-                    controller.enqueue(encoder.encode(fullResponse));
+                  fullResponse = content.text.value;
+                  // Check if it's JSON
+                  if (fullResponse.trim().startsWith('{')) {
+                    isJsonResponse = true;
                   }
                 }
+              }
+
+              // Send JSON responses only once at completion
+              if (isJsonResponse && !messageSent && fullResponse) {
+                controller.enqueue(encoder.encode(fullResponse));
+                messageSent = true;
               }
             }
 

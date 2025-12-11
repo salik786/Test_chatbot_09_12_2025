@@ -57,19 +57,19 @@ export default function ConversationSidebar({
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Overlay (shown when sidebar is open) */}
       {isOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:bg-black/20"
           onClick={onClose}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-screen transition-transform duration-300 ${
+        className={`fixed top-0 left-0 z-50 h-screen transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 w-80 bg-white/80 backdrop-blur-lg border-r border-purple-100 shadow-xl`}
+        } w-80 bg-white/80 backdrop-blur-lg border-r border-purple-100 shadow-xl`}
       >
         <div className="h-full flex flex-col">
           {/* Header */}
@@ -78,7 +78,8 @@ export default function ConversationSidebar({
               <h2 className="text-lg font-bold text-gray-900">Conversations</h2>
               <button
                 onClick={onClose}
-                className="lg:hidden p-2 rounded-lg hover:bg-purple-50 transition"
+                className="p-2 rounded-lg hover:bg-purple-50 transition"
+                title="Close sidebar"
               >
                 <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
