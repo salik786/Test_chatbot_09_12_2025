@@ -15,14 +15,16 @@ export default function LogoutButton() {
       });
 
       if (response.ok) {
+        // Wait a bit for session to clear on server
+        await new Promise(resolve => setTimeout(resolve, 100));
         router.push('/login');
         router.refresh();
       }
     } catch (error) {
       console.error('Logout error:', error);
-    } finally {
       setLoading(false);
     }
+    // Don't set loading to false - let redirect handle it
   };
 
   return (
