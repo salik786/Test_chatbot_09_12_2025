@@ -1,6 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
-import BarChart from './components/BarChart';
 import HorizontalBarChart from './components/HorizontalBarChart';
 
 // Force dynamic rendering and no caching for admin dashboard
@@ -44,41 +43,6 @@ async function getAdminStats() {
     .select('*', { count: 'exact', head: true })
     .gte('created_at', sevenDaysAgo.toISOString());
 
-  // Get user signups over last 30 days
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const { data: recentProfiles } = await supabase
-    .from('profiles')
-    .select('created_at')
-    .gte('created_at', thirtyDaysAgo.toISOString())
-    .order('created_at', { ascending: true });
-
-  // Group signups by date
-  const signupsByDate: Record<string, number> = {};
-  recentProfiles?.forEach((profile) => {
-    const date = new Date(profile.created_at).toLocaleDateString();
-    signupsByDate[date] = (signupsByDate[date] || 0) + 1;
-  });
-
-  // Get messages over last 14 days
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-
-  const { data: recentMessages } = await supabase
-    .from('messages')
-    .select('timestamp')
-    .eq('role', 'user')
-    .gte('timestamp', fourteenDaysAgo.toISOString())
-    .order('timestamp', { ascending: true });
-
-  // Group messages by date
-  const messagesByDate: Record<string, number> = {};
-  recentMessages?.forEach((message) => {
-    const date = new Date(message.timestamp).toLocaleDateString();
-    messagesByDate[date] = (messagesByDate[date] || 0) + 1;
-  });
-
   // Get assistant distribution (users per assistant)
   const { data: assistantAssignments } = await supabase
     .from('user_assistant')
@@ -113,8 +77,6 @@ async function getAdminStats() {
     totalMessages: totalMessages || 0,
     activeAssistants: activeAssistants || 0,
     recentUsers: recentUsers || 0,
-    signupsByDate,
-    messagesByDate,
     usersPerAssistant,
     engagement,
   };
@@ -225,36 +187,6 @@ export default async function AdminDashboard() {
 
       {/* Research Study Insights */}
       <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* User Signups Trend (Last 30 Days) */}
-        <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
-          <div className="px-6 py-5 border-b border-purple-100">
-            <h3 className="text-xl font-bold text-gray-900">
-              User Signups Trend
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              New registrations over the last 30 days
-            </p>
-          </div>
-          <div className="px-6 py-6">
-            <BarChart data={stats.signupsByDate} color="blue" maxBars={10} />
-          </div>
-        </div>
-
-        {/* Daily Message Activity (Last 14 Days) */}
-        <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
-          <div className="px-6 py-5 border-b border-purple-100">
-            <h3 className="text-xl font-bold text-gray-900">
-              Message Activity
-            </h3>
-            <p className="mt-1 text-sm text-gray-600">
-              User messages per day (last 14 days)
-            </p>
-          </div>
-          <div className="px-6 py-6">
-            <BarChart data={stats.messagesByDate} color="purple" maxBars={7} />
-          </div>
-        </div>
-
         {/* Assistant Distribution (Critical for Research) */}
         <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
           <div className="px-6 py-5 border-b border-purple-100">
