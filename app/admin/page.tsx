@@ -1,5 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
+import BarChart from './components/BarChart';
+import HorizontalBarChart from './components/HorizontalBarChart';
 
 // Force dynamic rendering and no caching for admin dashboard
 export const dynamic = 'force-dynamic';
@@ -234,35 +236,7 @@ export default async function AdminDashboard() {
             </p>
           </div>
           <div className="px-6 py-6">
-            {Object.keys(stats.signupsByDate).length > 0 ? (
-              <div className="space-y-3">
-                {Object.entries(stats.signupsByDate)
-                  .slice(-10) // Show last 10 days
-                  .map(([date, count]) => (
-                    <div key={date}>
-                      <div className="flex justify-between text-sm mb-1.5">
-                        <span className="font-medium text-gray-700">{date}</span>
-                        <span className="font-semibold text-blue-600">{count} users</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${(count / Math.max(...Object.values(stats.signupsByDate))) * 100}%`
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                <div className="pt-3 border-t border-gray-200">
-                  <p className="text-sm text-gray-600">
-                    Total last 30 days: <span className="font-semibold text-gray-900">{Object.values(stats.signupsByDate).reduce((a, b) => a + b, 0)} signups</span>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-4">No signup data yet</p>
-            )}
+            <BarChart data={stats.signupsByDate} color="blue" maxBars={10} />
           </div>
         </div>
 
@@ -277,35 +251,7 @@ export default async function AdminDashboard() {
             </p>
           </div>
           <div className="px-6 py-6">
-            {Object.keys(stats.messagesByDate).length > 0 ? (
-              <div className="space-y-3">
-                {Object.entries(stats.messagesByDate)
-                  .slice(-7) // Show last 7 days
-                  .map(([date, count]) => (
-                    <div key={date}>
-                      <div className="flex justify-between text-sm mb-1.5">
-                        <span className="font-medium text-gray-700">{date}</span>
-                        <span className="font-semibold text-purple-600">{count} messages</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-purple-500 to-purple-600 h-2.5 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${(count / Math.max(...Object.values(stats.messagesByDate))) * 100}%`
-                          }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                <div className="pt-3 border-t border-gray-200">
-                  <p className="text-sm text-gray-600">
-                    Total last 14 days: <span className="font-semibold text-gray-900">{Object.values(stats.messagesByDate).reduce((a, b) => a + b, 0)} messages</span>
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-4">No message data yet</p>
-            )}
+            <BarChart data={stats.messagesByDate} color="purple" maxBars={7} />
           </div>
         </div>
 
@@ -324,24 +270,9 @@ export default async function AdminDashboard() {
           </div>
           <div className="px-6 py-6">
             {Object.keys(stats.usersPerAssistant).length > 0 ? (
-              <div className="space-y-4">
-                {Object.entries(stats.usersPerAssistant).map(([name, count]) => (
-                  <div key={name}>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="font-semibold text-gray-900">{name}</span>
-                      <span className="text-gray-600">{count} users assigned</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-green-500 to-teal-600 h-3 rounded-full transition-all duration-500"
-                        style={{
-                          width: `${(count / Math.max(...Object.values(stats.usersPerAssistant))) * 100}%`
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-                <div className="pt-3 border-t border-gray-200">
+              <>
+                <HorizontalBarChart data={stats.usersPerAssistant} color="green" />
+                <div className="pt-4 border-t border-gray-200 mt-6">
                   {(() => {
                     const counts = Object.values(stats.usersPerAssistant);
                     const max = Math.max(...counts);
@@ -372,7 +303,7 @@ export default async function AdminDashboard() {
                     );
                   })()}
                 </div>
-              </div>
+              </>
             ) : (
               <p className="text-gray-500 text-center py-4">No assistant assignments yet</p>
             )}
@@ -390,61 +321,24 @@ export default async function AdminDashboard() {
             </p>
           </div>
           <div className="px-6 py-6">
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-semibold text-gray-900">Highly Active (20+ messages)</span>
-                  <span className="text-green-600 font-semibold">{stats.engagement.highlyActive} users</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${stats.totalUsers > 0 ? (stats.engagement.highlyActive / stats.totalUsers) * 100 : 0}%`
-                    }}
-                  ></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-semibold text-gray-900">Moderately Active (5-19 messages)</span>
-                  <span className="text-blue-600 font-semibold">{stats.engagement.moderatelyActive} users</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${stats.totalUsers > 0 ? (stats.engagement.moderatelyActive / stats.totalUsers) * 100 : 0}%`
-                    }}
-                  ></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="font-semibold text-gray-900">Low Activity (1-4 messages)</span>
-                  <span className="text-orange-600 font-semibold">{stats.engagement.lowActivity} users</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${stats.totalUsers > 0 ? (stats.engagement.lowActivity / stats.totalUsers) * 100 : 0}%`
-                    }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-gray-200">
-                <p className="text-sm text-gray-600">
-                  Engagement Rate: <span className="font-semibold text-gray-900">
-                    {stats.totalUsers > 0
-                      ? Math.round(((stats.engagement.highlyActive + stats.engagement.moderatelyActive) / stats.totalUsers) * 100)
-                      : 0}%
-                  </span> (active/moderate users)
-                </p>
-              </div>
+            <HorizontalBarChart
+              data={{
+                'Highly Active (20+ messages)': stats.engagement.highlyActive,
+                'Moderately Active (5-19 messages)': stats.engagement.moderatelyActive,
+                'Low Activity (1-4 messages)': stats.engagement.lowActivity,
+              }}
+              color="blue"
+              showPercentage={true}
+              total={stats.totalUsers}
+            />
+            <div className="pt-4 border-t border-gray-200 mt-6">
+              <p className="text-sm text-gray-600">
+                Engagement Rate: <span className="font-semibold text-gray-900">
+                  {stats.totalUsers > 0
+                    ? Math.round(((stats.engagement.highlyActive + stats.engagement.moderatelyActive) / stats.totalUsers) * 100)
+                    : 0}%
+                </span> (active/moderate users)
+              </p>
             </div>
           </div>
         </div>

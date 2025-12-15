@@ -2,6 +2,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
 import UserManagementClient from './UserManagementClient';
 
+// Force dynamic rendering and no caching for admin pages
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Assistant = Database['public']['Tables']['assistants']['Row'];
 
