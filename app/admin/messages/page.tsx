@@ -2,6 +2,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
 import MessagesViewerClient from './MessagesViewerClient';
 
+// Force dynamic rendering and no caching for admin pages
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 type Message = Database['public']['Tables']['messages']['Row'];
 
 async function getMessagesWithDetails() {
