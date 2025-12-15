@@ -53,108 +53,132 @@ function ClientDateDisplay({ date }: { date: string }) {
   );
 }
 
-interface ConversationGroup {
+interface UserConversationSummary {
   userId: string;
   userEmail: string;
-  assistantName: string;
-  messages: MessageWithDetails[];
+  fullName: string | null;
+  conversationCount: number;
+  totalMessages: number;
   lastMessageTime: string;
+  conversations: {
+    assistantId: string;
+    assistantName: string;
+    messageCount: number;
+    lastMessageTime: string;
+    messages: MessageWithDetails[];
+  }[];
 }
 
 export default function MessagesViewerClient({ messages: initialMessages, users, assistants }: Props) {
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [selectedAssistant, setSelectedAssistant] = useState<string>('all');
-  const [selectedRole, setSelectedRole] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'conversation'>('conversation');
-  const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [selectedConversation, setSelectedConversation] = useState<{
+    userId: string;
+    assistantId: string;
+    messages: MessageWithDetails[];
+  } | null>(null);
 
-  const toggleConversation = (key: string) => {
-    setExpandedConversations(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
+  // Group messages by user
+  const userSummaries = useMemo(() => {
+    const userMap = new Map<string, UserConversationSummary>();
 
-  const filteredMessages = useMemo(() => {
-    return initialMessages.filter(message => {
-      if (selectedUser !== 'all' && message.user_id !== selectedUser) return false;
-      if (selectedAssistant !== 'all' && message.assistant_id !== selectedAssistant) return false;
-      if (selectedRole !== 'all' && message.role !== selectedRole) return false;
-      if (searchQuery && !message.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      return true;
-    });
-  }, [initialMessages, selectedUser, selectedAssistant, selectedRole, searchQuery]);
-
-  // Group messages by user and assistant for conversation view
-  const conversations = useMemo(() => {
-    const grouped = new Map<string, ConversationGroup>();
-
-    filteredMessages.forEach(message => {
-      const key = `${message.user_id}-${message.assistant_id}`;
-
-      if (!grouped.has(key)) {
-        grouped.set(key, {
+    initialMessages.forEach(message => {
+      if (!userMap.has(message.user_id)) {
+        userMap.set(message.user_id, {
           userId: message.user_id,
-          userEmail: message.profiles?.email || 'Unknown User',
-          assistantName: message.assistants?.name || 'Unknown Assistant',
-          messages: [],
+          userEmail: message.profiles?.email || 'Unknown',
+          fullName: message.profiles?.full_name || null,
+          conversationCount: 0,
+          totalMessages: 0,
           lastMessageTime: message.timestamp,
+          conversations: []
         });
       }
 
-      const group = grouped.get(key)!;
-      group.messages.push(message);
+      const summary = userMap.get(message.user_id)!;
+      summary.totalMessages++;
 
-      // Update last message time
-      if (new Date(message.timestamp) > new Date(group.lastMessageTime)) {
-        group.lastMessageTime = message.timestamp;
+      if (new Date(message.timestamp) > new Date(summary.lastMessageTime)) {
+        summary.lastMessageTime = message.timestamp;
+      }
+
+      // Find or create conversation
+      let conversation = summary.conversations.find(
+        c => c.assistantId === message.assistant_id
+      );
+
+      if (!conversation) {
+        conversation = {
+          assistantId: message.assistant_id,
+          assistantName: message.assistants?.name || 'Unknown',
+          messageCount: 0,
+          lastMessageTime: message.timestamp,
+          messages: []
+        };
+        summary.conversations.push(conversation);
+        summary.conversationCount++;
+      }
+
+      conversation.messageCount++;
+      conversation.messages.push(message);
+
+      if (new Date(message.timestamp) > new Date(conversation.lastMessageTime)) {
+        conversation.lastMessageTime = message.timestamp;
       }
     });
 
-    // Sort conversations by last message time (most recent first)
-    return Array.from(grouped.values()).sort(
+    return Array.from(userMap.values()).sort(
       (a, b) => new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
     );
-  }, [filteredMessages]);
+  }, [initialMessages]);
 
-  // Paginate conversations
-  const paginatedConversations = useMemo(() => {
+  // Filter user summaries
+  const filteredSummaries = useMemo(() => {
+    return userSummaries.filter(summary => {
+      if (selectedUser !== 'all' && summary.userId !== selectedUser) return false;
+      if (selectedAssistant !== 'all') {
+        const hasAssistant = summary.conversations.some(c => c.assistantId === selectedAssistant);
+        if (!hasAssistant) return false;
+      }
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesEmail = summary.userEmail.toLowerCase().includes(query);
+        const matchesName = summary.fullName?.toLowerCase().includes(query);
+        if (!matchesEmail && !matchesName) return false;
+      }
+      return true;
+    });
+  }, [userSummaries, selectedUser, selectedAssistant, searchQuery]);
+
+  // Paginate user summaries
+  const paginatedSummaries = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
-    return conversations.slice(start, end);
-  }, [conversations, currentPage, itemsPerPage]);
+    return filteredSummaries.slice(start, end);
+  }, [filteredSummaries, currentPage, itemsPerPage]);
 
-  const totalPages = Math.ceil(conversations.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredSummaries.length / itemsPerPage);
+
+  const openConversation = (userId: string, assistantId: string, messages: MessageWithDetails[]) => {
+    const sortedMessages = messages.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    setSelectedConversation({ userId, assistantId, messages: sortedMessages });
+  };
+
+  const closeConversation = () => {
+    setSelectedConversation(null);
+  };
 
   return (
     <div className="mt-8">
       {/* Filters */}
       <div className="bg-white shadow sm:rounded-lg mb-6">
         <div className="px-4 py-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
-            <div>
-              <label htmlFor="view-mode" className="block text-sm font-medium text-gray-700">
-                View Mode
-              </label>
-              <select
-                id="view-mode"
-                value={viewMode}
-                onChange={(e) => setViewMode(e.target.value as 'list' | 'conversation')}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="conversation">Conversation</option>
-                <option value="list">All Messages</option>
-              </select>
-            </div>
-
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div>
               <label htmlFor="user-filter" className="block text-sm font-medium text-gray-700">
                 Filter by User
@@ -162,7 +186,10 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
               <select
                 id="user-filter"
                 value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
+                onChange={(e) => {
+                  setSelectedUser(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
                 <option value="all">All Users</option>
@@ -181,7 +208,10 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
               <select
                 id="assistant-filter"
                 value={selectedAssistant}
-                onChange={(e) => setSelectedAssistant(e.target.value)}
+                onChange={(e) => {
+                  setSelectedAssistant(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               >
                 <option value="all">All Assistants</option>
@@ -194,255 +224,266 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
             </div>
 
             <div>
-              <label htmlFor="role-filter" className="block text-sm font-medium text-gray-700">
-                Filter by Role
-              </label>
-              <select
-                id="role-filter"
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="all">All Roles</option>
-                <option value="user">User</option>
-                <option value="assistant">Assistant</option>
-              </select>
-            </div>
-
-            <div>
               <label htmlFor="search" className="block text-sm font-medium text-gray-700">
-                Search Content
+                Search User
               </label>
               <input
                 type="text"
                 id="search"
-                placeholder="Search messages..."
+                placeholder="Search by email or name..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
             </div>
+
+            <div>
+              <label htmlFor="items-per-page" className="block text-sm font-medium text-gray-700">
+                Items per page
+              </label>
+              <select
+                id="items-per-page"
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-            <div>
-              {viewMode === 'conversation'
-                ? `Showing ${paginatedConversations.length} of ${conversations.length} conversations (${filteredMessages.length} total messages)`
-                : `Showing ${filteredMessages.length} of ${initialMessages.length} messages`
-              }
-            </div>
-            {viewMode === 'conversation' && (
-              <div className="flex items-center gap-2">
-                <label htmlFor="items-per-page" className="text-sm">Items per page:</label>
-                <select
-                  id="items-per-page"
-                  value={itemsPerPage}
-                  onChange={(e) => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 text-sm"
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-            )}
+          <div className="mt-4 text-sm text-gray-500">
+            Showing {paginatedSummaries.length} of {filteredSummaries.length} users
+            ({initialMessages.length} total messages)
           </div>
         </div>
       </div>
 
-      {/* Messages Display */}
-      {viewMode === 'conversation' ? (
-        <>
-          <div className="space-y-4">
-            {paginatedConversations.length === 0 ? (
-              <div className="bg-white/80 backdrop-blur-lg shadow-lg sm:rounded-2xl px-6 py-12 text-center text-gray-500 border border-purple-100">
-                No conversations found matching your filters.
-              </div>
+      {/* User Summary Table */}
+      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                User
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Conversations
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Total Messages
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Last Activity
+              </th>
+              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {paginatedSummaries.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                  No conversations found matching your filters.
+                </td>
+              </tr>
             ) : (
-              paginatedConversations.map((conversation) => {
-                const conversationKey = `${conversation.userId}-${conversation.assistantName}`;
-                const isExpanded = expandedConversations.has(conversationKey);
-
-                return (
-                  <div key={conversationKey} className="bg-white/80 backdrop-blur-lg shadow-lg sm:rounded-2xl overflow-hidden border border-purple-100">
-                    {/* Conversation Header - Clickable */}
-                    <button
-                      onClick={() => toggleConversation(conversationKey)}
-                      className="w-full bg-gradient-to-r from-purple-50 to-blue-50 px-6 py-4 border-b border-purple-100 hover:from-purple-100 hover:to-blue-100 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 text-left">
-                          <svg
-                            className={`h-5 w-5 text-purple-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900">
-                              {conversation.userEmail}
-                            </h3>
-                            <p className="text-sm text-gray-600">
-                              with {conversation.assistantName} • {conversation.messages.length} messages
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-500 text-right">
-                          <ClientDateDisplay date={conversation.lastMessageTime} />
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* Conversation Messages - Collapsible */}
-                    {isExpanded && (
-                      <div className="divide-y divide-gray-100">
-                        {conversation.messages
-                          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-                          .map((message) => (
-                            <div
-                              key={message.id}
-                              className={`px-6 py-4 ${
-                                message.role === 'user' ? 'bg-blue-50/50' : 'bg-white'
-                              }`}
-                            >
-                              <div className="flex items-start space-x-3">
-                                <div className="flex-shrink-0">
-                                  <span
-                                    className={`inline-flex items-center justify-center h-8 w-8 rounded-full ${
-                                      message.role === 'user'
-                                        ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white'
-                                        : 'bg-gradient-to-br from-green-500 to-teal-600 text-white'
-                                    }`}
-                                  >
-                                    {message.role === 'user' ? 'U' : 'A'}
-                                  </span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between mb-1">
-                                    <p className="text-sm font-medium text-gray-900">
-                                      {message.role === 'user' ? 'User' : message.assistants?.name}
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                      <ClientDateDisplay date={message.timestamp} />
-                                    </p>
-                                  </div>
-                                  <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">
-                                    {message.content}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
+              paginatedSummaries.map((summary) => (
+                <tr key={summary.userId} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{summary.userEmail}</div>
+                    {summary.fullName && (
+                      <div className="text-sm text-gray-500">{summary.fullName}</div>
                     )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between bg-white/80 backdrop-blur-lg px-6 py-4 rounded-2xl shadow-lg border border-purple-100">
-              <div className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
-                >
-                  Previous
-                </button>
-                <div className="flex items-center gap-1">
-                  {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                          currentPage === pageNum
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-          <div className="divide-y divide-gray-200">
-            {filteredMessages.length === 0 ? (
-              <div className="px-6 py-12 text-center text-gray-500">
-                No messages found matching your filters.
-              </div>
-            ) : (
-              filteredMessages.map((message) => (
-                <div key={message.id} className="px-6 py-4 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            message.role === 'user'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex flex-wrap gap-1">
+                      {summary.conversations.map((conv) => (
+                        <button
+                          key={conv.assistantId}
+                          onClick={() => openConversation(summary.userId, conv.assistantId, conv.messages)}
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 hover:bg-purple-200 transition"
                         >
-                          {message.role}
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">
-                          {message.profiles?.email || 'Unknown User'}
-                        </span>
-                        <span className="text-sm text-gray-500">→</span>
-                        <span className="text-sm text-gray-700">
-                          {message.assistants?.name || 'Unknown Assistant'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-900 whitespace-pre-wrap break-words">
-                        {message.content}
-                      </p>
+                          {conv.assistantName}
+                          <span className="ml-1 text-purple-600">({conv.messageCount})</span>
+                        </button>
+                      ))}
                     </div>
-                    <div className="ml-4 flex-shrink-0">
-                      <div className="text-xs text-gray-500 text-right">
-                        <ClientDateDisplay date={message.timestamp} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{summary.totalMessages}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <ClientDateDisplay date={summary.lastMessageTime} />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => {
+                        if (summary.conversations.length > 0) {
+                          openConversation(
+                            summary.userId,
+                            summary.conversations[0].assistantId,
+                            summary.conversations[0].messages
+                          );
+                        }
+                      }}
+                      className="text-blue-600 hover:text-blue-900"
+                    >
+                      View All
+                    </button>
+                  </td>
+                </tr>
               ))
             )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between bg-white px-6 py-4 rounded-lg shadow">
+          <div className="text-sm text-gray-700">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              First
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <div className="flex items-center gap-1">
+              {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`px-3 py-2 text-sm font-medium rounded-md ${
+                      currentPage === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Conversation Detail Modal */}
+      {selectedConversation && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">
+                  Conversation Details
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {selectedConversation.messages[0]?.profiles?.email || 'Unknown User'}
+                  {' → '}
+                  {selectedConversation.messages[0]?.assistants?.name || 'Unknown Assistant'}
+                </p>
+              </div>
+              <button
+                onClick={closeConversation}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-4">
+                {selectedConversation.messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-medium opacity-75">
+                          {message.role === 'user' ? 'User' : message.assistants?.name}
+                        </span>
+                        <span className="text-xs opacity-60">
+                          {new Date(message.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
+              <div className="text-sm text-gray-500">
+                {selectedConversation.messages.length} messages in this conversation
+              </div>
+              <button
+                onClick={closeConversation}
+                className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
