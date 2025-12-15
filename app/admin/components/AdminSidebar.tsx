@@ -11,6 +11,7 @@ interface AdminSidebarProps {
 export default function AdminSidebar({ userEmail }: AdminSidebarProps) {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const navigation = [
     {
@@ -56,6 +57,20 @@ export default function AdminSidebar({ userEmail }: AdminSidebarProps) {
       return pathname === href;
     }
     return pathname.startsWith(href);
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+
+    // Force hard redirect to login page (clears all client state)
+    window.location.href = '/login';
   };
 
   return (
@@ -166,17 +181,16 @@ export default function AdminSidebar({ userEmail }: AdminSidebarProps) {
                 <span>Back to Chat</span>
               </Link>
 
-              <form action="/api/auth/logout" method="POST" className="w-full">
-                <button
-                  type="submit"
-                  className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition w-full"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  <span>Logout</span>
-                </button>
-              </form>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>{loggingOut ? 'Logging out...' : 'Logout'}</span>
+              </button>
             </div>
           </div>
         </div>
