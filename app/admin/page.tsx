@@ -1,12 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
 import { Database } from '@/types/database';
+
+// Force dynamic rendering and no caching for admin dashboard
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Assistant = Database['public']['Tables']['assistants']['Row'];
 type Message = Database['public']['Tables']['messages']['Row'];
 
 async function getAdminStats() {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
 
   // Get total users
   const { count: totalUsers } = await supabase
@@ -38,18 +42,68 @@ async function getAdminStats() {
     .select('*', { count: 'exact', head: true })
     .gte('created_at', sevenDaysAgo.toISOString());
 
-  // Get messages per assistant
-  const { data: messagesPerAssistant } = await supabase
+  // Get user signups over last 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const { data: recentProfiles } = await supabase
+    .from('profiles')
+    .select('created_at')
+    .gte('created_at', thirtyDaysAgo.toISOString())
+    .order('created_at', { ascending: true });
+
+  // Group signups by date
+  const signupsByDate: Record<string, number> = {};
+  recentProfiles?.forEach((profile) => {
+    const date = new Date(profile.created_at).toLocaleDateString();
+    signupsByDate[date] = (signupsByDate[date] || 0) + 1;
+  });
+
+  // Get messages over last 14 days
+  const fourteenDaysAgo = new Date();
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+  const { data: recentMessages } = await supabase
     .from('messages')
-    .select('assistant_id, assistants(name)')
+    .select('timestamp')
+    .eq('role', 'user')
+    .gte('timestamp', fourteenDaysAgo.toISOString())
+    .order('timestamp', { ascending: true });
+
+  // Group messages by date
+  const messagesByDate: Record<string, number> = {};
+  recentMessages?.forEach((message) => {
+    const date = new Date(message.timestamp).toLocaleDateString();
+    messagesByDate[date] = (messagesByDate[date] || 0) + 1;
+  });
+
+  // Get assistant distribution (users per assistant)
+  const { data: assistantAssignments } = await supabase
+    .from('user_assistant')
+    .select('assistant_id, assistants(name)');
+
+  const usersPerAssistant: Record<string, number> = {};
+  assistantAssignments?.forEach((assignment: any) => {
+    const name = assignment.assistants?.name || 'Unknown';
+    usersPerAssistant[name] = (usersPerAssistant[name] || 0) + 1;
+  });
+
+  // Get user engagement levels
+  const { data: userMessageCounts } = await supabase
+    .from('messages')
+    .select('user_id')
     .eq('role', 'user');
 
-  // Count messages per assistant
-  const assistantMessageCounts: Record<string, number> = {};
-  messagesPerAssistant?.forEach((msg: any) => {
-    const name = msg.assistants?.name || 'Unknown';
-    assistantMessageCounts[name] = (assistantMessageCounts[name] || 0) + 1;
+  const messagesPerUser: Record<string, number> = {};
+  userMessageCounts?.forEach((msg) => {
+    messagesPerUser[msg.user_id] = (messagesPerUser[msg.user_id] || 0) + 1;
   });
+
+  const engagement = {
+    highlyActive: Object.values(messagesPerUser).filter(count => count >= 20).length,
+    moderatelyActive: Object.values(messagesPerUser).filter(count => count >= 5 && count < 20).length,
+    lowActivity: Object.values(messagesPerUser).filter(count => count > 0 && count < 5).length,
+  };
 
   return {
     totalUsers: totalUsers || 0,
@@ -57,7 +111,10 @@ async function getAdminStats() {
     totalMessages: totalMessages || 0,
     activeAssistants: activeAssistants || 0,
     recentUsers: recentUsers || 0,
-    assistantMessageCounts,
+    signupsByDate,
+    messagesByDate,
+    usersPerAssistant,
+    engagement,
   };
 }
 
@@ -164,40 +221,231 @@ export default async function AdminDashboard() {
         </div>
       </div>
 
-      {/* Assistant Usage */}
-      <div className="mt-8">
+      {/* Research Study Insights */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* User Signups Trend (Last 30 Days) */}
         <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
           <div className="px-6 py-5 border-b border-purple-100">
             <h3 className="text-xl font-bold text-gray-900">
-              Assistant Usage
+              User Signups Trend
             </h3>
             <p className="mt-1 text-sm text-gray-600">
-              Number of user messages per assistant
+              New registrations over the last 30 days
             </p>
           </div>
           <div className="px-6 py-6">
-            {Object.keys(stats.assistantMessageCounts).length > 0 ? (
-              <div className="space-y-5">
-                {Object.entries(stats.assistantMessageCounts).map(([name, count]) => (
+            {Object.keys(stats.signupsByDate).length > 0 ? (
+              <div className="space-y-3">
+                {Object.entries(stats.signupsByDate)
+                  .slice(-10) // Show last 10 days
+                  .map(([date, count]) => (
+                    <div key={date}>
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-medium text-gray-700">{date}</span>
+                        <span className="font-semibold text-blue-600">{count} users</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${(count / Math.max(...Object.values(stats.signupsByDate))) * 100}%`
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                <div className="pt-3 border-t border-gray-200">
+                  <p className="text-sm text-gray-600">
+                    Total last 30 days: <span className="font-semibold text-gray-900">{Object.values(stats.signupsByDate).reduce((a, b) => a + b, 0)} signups</span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">No signup data yet</p>
+            )}
+          </div>
+        </div>
+
+        {/* Daily Message Activity (Last 14 Days) */}
+        <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
+          <div className="px-6 py-5 border-b border-purple-100">
+            <h3 className="text-xl font-bold text-gray-900">
+              Message Activity
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              User messages per day (last 14 days)
+            </p>
+          </div>
+          <div className="px-6 py-6">
+            {Object.keys(stats.messagesByDate).length > 0 ? (
+              <div className="space-y-3">
+                {Object.entries(stats.messagesByDate)
+                  .slice(-7) // Show last 7 days
+                  .map(([date, count]) => (
+                    <div key={date}>
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-medium text-gray-700">{date}</span>
+                        <span className="font-semibold text-purple-600">{count} messages</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-purple-500 to-purple-600 h-2.5 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${(count / Math.max(...Object.values(stats.messagesByDate))) * 100}%`
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                <div className="pt-3 border-t border-gray-200">
+                  <p className="text-sm text-gray-600">
+                    Total last 14 days: <span className="font-semibold text-gray-900">{Object.values(stats.messagesByDate).reduce((a, b) => a + b, 0)} messages</span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 text-center py-4">No message data yet</p>
+            )}
+          </div>
+        </div>
+
+        {/* Assistant Distribution (Critical for Research) */}
+        <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
+          <div className="px-6 py-5 border-b border-purple-100">
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              Assistant Distribution
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                Research Critical
+              </span>
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Users assigned to each assistant (should be balanced)
+            </p>
+          </div>
+          <div className="px-6 py-6">
+            {Object.keys(stats.usersPerAssistant).length > 0 ? (
+              <div className="space-y-4">
+                {Object.entries(stats.usersPerAssistant).map(([name, count]) => (
                   <div key={name}>
                     <div className="flex justify-between text-sm mb-2">
                       <span className="font-semibold text-gray-900">{name}</span>
-                      <span className="text-gray-600">{count} messages</span>
+                      <span className="text-gray-600">{count} users assigned</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+                        className="bg-gradient-to-r from-green-500 to-teal-600 h-3 rounded-full transition-all duration-500"
                         style={{
-                          width: `${(count / Math.max(...Object.values(stats.assistantMessageCounts))) * 100}%`
+                          width: `${(count / Math.max(...Object.values(stats.usersPerAssistant))) * 100}%`
                         }}
                       ></div>
                     </div>
                   </div>
                 ))}
+                <div className="pt-3 border-t border-gray-200">
+                  {(() => {
+                    const counts = Object.values(stats.usersPerAssistant);
+                    const max = Math.max(...counts);
+                    const min = Math.min(...counts);
+                    const diff = max - min;
+                    const isBalanced = diff <= 1;
+
+                    return (
+                      <div className={`p-3 rounded-lg ${isBalanced ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                        <p className="text-sm">
+                          {isBalanced ? (
+                            <span className="text-green-800 font-medium flex items-center gap-2">
+                              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                              </svg>
+                              Balanced distribution (difference: {diff})
+                            </span>
+                          ) : (
+                            <span className="text-yellow-800 font-medium flex items-center gap-2">
+                              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                              Unbalanced (difference: {diff})
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             ) : (
-              <p className="text-gray-500 text-center py-4">No message data yet</p>
+              <p className="text-gray-500 text-center py-4">No assistant assignments yet</p>
             )}
+          </div>
+        </div>
+
+        {/* User Engagement Levels */}
+        <div className="bg-white/80 backdrop-blur-lg shadow-lg rounded-2xl border border-purple-100">
+          <div className="px-6 py-5 border-b border-purple-100">
+            <h3 className="text-xl font-bold text-gray-900">
+              User Engagement Levels
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Categorized by message activity
+            </p>
+          </div>
+          <div className="px-6 py-6">
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-semibold text-gray-900">Highly Active (20+ messages)</span>
+                  <span className="text-green-600 font-semibold">{stats.engagement.highlyActive} users</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-green-500 to-green-600 h-3 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${stats.totalUsers > 0 ? (stats.engagement.highlyActive / stats.totalUsers) * 100 : 0}%`
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-semibold text-gray-900">Moderately Active (5-19 messages)</span>
+                  <span className="text-blue-600 font-semibold">{stats.engagement.moderatelyActive} users</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${stats.totalUsers > 0 ? (stats.engagement.moderatelyActive / stats.totalUsers) * 100 : 0}%`
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-semibold text-gray-900">Low Activity (1-4 messages)</span>
+                  <span className="text-orange-600 font-semibold">{stats.engagement.lowActivity} users</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-orange-500 to-orange-600 h-3 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${stats.totalUsers > 0 ? (stats.engagement.lowActivity / stats.totalUsers) * 100 : 0}%`
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Engagement Rate: <span className="font-semibold text-gray-900">
+                    {stats.totalUsers > 0
+                      ? Math.round(((stats.engagement.highlyActive + stats.engagement.moderatelyActive) / stats.totalUsers) * 100)
+                      : 0}%
+                  </span> (active/moderate users)
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
