@@ -35,12 +35,21 @@ export async function POST() {
     const user = await requireAuth();
     const supabase = await createClient();
 
+    console.log('Creating conversation for user:', user.id);
+
     // Get user's assigned assistant
     const assignment = await getUserAssignment(supabase, user.id);
 
+    console.log('User assignment:', assignment);
+
     if (!assignment || !assignment.assistant) {
+      console.error('No assistant assigned to user:', user.id);
       return NextResponse.json(
-        { error: 'No assistant assigned to user' },
+        {
+          error: 'No assistant assigned to your account',
+          details: 'Please contact support to get an assistant assigned.',
+          code: 'NO_ASSISTANT'
+        },
         { status: 400 }
       );
     }
@@ -57,14 +66,28 @@ export async function POST() {
       .single();
 
     if (error) {
+      console.error('Supabase error creating conversation:', error);
       throw error;
     }
+
+    console.log('Conversation created successfully:', conversation.id);
 
     return NextResponse.json({ conversation });
   } catch (error) {
     console.error('Error creating conversation:', error);
+
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+      });
+    }
+
     return NextResponse.json(
-      { error: 'Failed to create conversation' },
+      {
+        error: 'Failed to create conversation',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
