@@ -14,16 +14,16 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
+    const serviceSupabase = createServiceClient();
 
     console.log('Starting signup for:', email);
 
-    // Sign up the user - triggers will handle profile and assistant assignment
+    // Sign up the user
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          // Store admin email in auth metadata for trigger to check
           admin_email: process.env.ADMIN_EMAIL,
         },
       },
@@ -45,75 +45,117 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log('User created in auth.users:', authData.user.id);
+    const userId = authData.user.id;
+    const userEmail = authData.user.email!;
+    console.log('User created in auth.users:', userId);
 
-    // Wait for triggers to complete
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Wait a moment for triggers to potentially complete
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Use service client to verify (bypasses RLS)
-    const serviceSupabase = createServiceClient();
-
-    // Verify profile and assignment were created
-    console.log('Verifying profile creation...');
-    const { data: profile, error: profileError } = await serviceSupabase
+    // Check if profile was created by trigger
+    let { data: profile, error: profileCheckError } = await serviceSupabase
       .from('profiles')
       .select('id, email, is_admin')
-      .eq('id', authData.user.id)
+      .eq('id', userId)
       .single();
 
-    if (profileError) {
-      console.error('Profile verification error:', profileError);
+    // If profile doesn't exist, create it manually
+    if (profileCheckError || !profile) {
+      console.warn('⚠️ Trigger did not create profile. Creating manually...');
+
+      const isAdmin = process.env.ADMIN_EMAIL && userEmail === process.env.ADMIN_EMAIL;
+
+      const { data: newProfile, error: profileCreateError } = await serviceSupabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: userEmail,
+          is_admin: isAdmin || false,
+        })
+        .select()
+        .single();
+
+      if (profileCreateError) {
+        console.error('❌ Failed to create profile:', profileCreateError);
+        return NextResponse.json(
+          { error: 'Failed to create user profile' },
+          { status: 500 }
+        );
+      }
+
+      profile = newProfile;
+      console.log('✅ Profile created manually:', profile);
     } else {
-      console.log('Profile verified:', profile);
+      console.log('✅ Profile created by trigger:', profile);
     }
 
-    // Verify assistant assignment
-    console.log('Verifying assistant assignment...');
-    let { data: assignment, error: assignmentError } = await serviceSupabase
+    // Check if assistant assignment was created
+    let { data: assignment, error: assignmentCheckError } = await serviceSupabase
       .from('user_assistant')
-      .select('id, assistant_id, assistants(name)')
-      .eq('user_id', authData.user.id)
+      .select('id, assistant_id, assistants(id, name, openai_assistant_id)')
+      .eq('user_id', userId)
       .single();
 
-    // FALLBACK: If trigger didn't create assignment, create it manually
-    if (assignmentError || !assignment) {
-      console.warn('⚠️ Trigger did not create assignment. Creating manually...');
+    // If assignment doesn't exist, create it manually with round-robin logic
+    if (assignmentCheckError || !assignment) {
+      console.warn('⚠️ Trigger did not create assignment. Creating manually with round-robin...');
 
-      // Get a random available assistant
-      const { data: availableAssistant, error: assistantError } = await serviceSupabase
+      // Get the assistant with the FEWEST assigned users (round-robin)
+      const { data: assistantCounts, error: countsError } = await serviceSupabase
         .from('assistants')
-        .select('id, name')
+        .select('id, name, openai_assistant_id, active, available_for_random_assignment')
         .eq('active', true)
-        .eq('available_for_random_assignment', true)
-        .limit(1);
+        .eq('available_for_random_assignment', true);
 
-      if (assistantError || !availableAssistant || availableAssistant.length === 0) {
-        console.error('❌ No assistants available:', assistantError);
-      } else {
-        const selectedAssistant = availableAssistant[0];
-        console.log('📌 Manually assigning assistant:', selectedAssistant.name);
-
-        // Manually insert the assignment
-        const { data: newAssignment, error: insertError } = await serviceSupabase
-          .from('user_assistant')
-          .insert({
-            user_id: authData.user.id,
-            assistant_id: selectedAssistant.id,
-            assigned_by: null,
-            assigned_at: new Date().toISOString(),
-          })
-          .select('id, assistant_id, assistants(name)')
-          .single();
-
-        if (insertError) {
-          console.error('❌ Failed to manually assign assistant:', insertError);
-        } else {
-          console.log('✅ Successfully assigned assistant manually:', newAssignment);
-          assignment = newAssignment;
-        }
+      if (countsError || !assistantCounts || assistantCounts.length === 0) {
+        console.error('❌ No assistants available:', countsError);
+        return NextResponse.json(
+          { error: 'No assistants available for assignment' },
+          { status: 500 }
+        );
       }
+
+      // Count users per assistant
+      const userCounts: Record<string, number> = {};
+      for (const assistant of assistantCounts) {
+        const { count } = await serviceSupabase
+          .from('user_assistant')
+          .select('*', { count: 'exact', head: true })
+          .eq('assistant_id', assistant.id);
+
+        userCounts[assistant.id] = count || 0;
+      }
+
+      // Find assistant with fewest users
+      const selectedAssistant = assistantCounts.reduce((min, current) => {
+        return userCounts[current.id] < userCounts[min.id] ? current : min;
+      });
+
+      console.log('📌 Assigning to assistant with round-robin:', selectedAssistant.name, 'Current users:', userCounts[selectedAssistant.id]);
+
+      // Create the assignment
+      const { data: newAssignment, error: assignmentCreateError } = await serviceSupabase
+        .from('user_assistant')
+        .insert({
+          user_id: userId,
+          assistant_id: selectedAssistant.id,
+          assigned_by: null,
+        })
+        .select('id, assistant_id, assistants(id, name, openai_assistant_id)')
+        .single();
+
+      if (assignmentCreateError) {
+        console.error('❌ Failed to create assignment:', assignmentCreateError);
+        return NextResponse.json(
+          { error: 'Failed to assign assistant' },
+          { status: 500 }
+        );
+      }
+
+      assignment = newAssignment;
+      console.log('✅ Assignment created manually:', assignment);
     } else {
-      console.log('✅ Assistant assignment verified (trigger worked):', assignment);
+      console.log('✅ Assignment created by trigger:', assignment);
     }
 
     // Sign out the user - they need to log in manually
@@ -126,7 +168,7 @@ export async function POST(request: Request) {
       redirectTo: '/login',
       showSuccess: true,
       debug: {
-        userId: authData.user.id,
+        userId,
         profileCreated: !!profile,
         assignmentCreated: !!assignment,
         assistantName: assignment?.assistants?.name || 'None',
@@ -135,7 +177,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Signup error:', error);
 
-    // Log detailed error information
     if (error instanceof Error) {
       console.error('Error details:', {
         message: error.message,
