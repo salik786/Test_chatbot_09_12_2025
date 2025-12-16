@@ -186,12 +186,15 @@ export async function POST(request: Request) {
             if (event.event === 'thread.run.completed') {
               // Save assistant message to database
               if (fullResponse) {
-                // Parse JSON to extract just the "response" field for storage
+                // Parse JSON to extract just the "response" or "text" field for storage
                 let contentToSave = fullResponse;
                 try {
                   const jsonContent = JSON.parse(fullResponse);
+                  // Check for both "response" and "text" fields
                   if (jsonContent.response) {
                     contentToSave = jsonContent.response;
+                  } else if (jsonContent.text) {
+                    contentToSave = jsonContent.text;
                   }
                 } catch {
                   // Not JSON or parse failed, save as-is
