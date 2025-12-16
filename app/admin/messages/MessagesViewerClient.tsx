@@ -173,7 +173,7 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
     setSelectedConversation(null);
   };
 
-  // Download messages as CSV for research analysis
+  // Download messages as CSV for personality analysis
   const downloadMessagesCSV = () => {
     // Get filtered messages based on current filters
     const filteredMessages = initialMessages.filter(message => {
@@ -193,37 +193,57 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    // Create CSV header
+    // Create CSV header - simplified for personality analysis
     const headers = [
       'Timestamp',
-      'Date',
-      'Time',
-      'User Email',
-      'User Full Name',
-      'Assistant Name',
-      'Role',
-      'Message Content',
-      'Conversation ID',
-      'User ID',
-      'Assistant ID'
+      'Assistant Type',
+      'User Message',
+      'Assistant Reply'
     ];
 
+    // Group messages into conversation pairs (user question → assistant answer)
+    const conversationPairs: Array<{
+      timestamp: string;
+      assistantType: string;
+      userMessage: string;
+      assistantReply: string;
+    }> = [];
+
+    for (let i = 0; i < sortedMessages.length; i++) {
+      const message = sortedMessages[i];
+
+      if (message.role === 'user') {
+        // Find the next assistant message
+        const nextMessage = sortedMessages[i + 1];
+        if (nextMessage && nextMessage.role === 'assistant') {
+          conversationPairs.push({
+            timestamp: message.timestamp,
+            assistantType: message.assistants?.name || 'Unknown',
+            userMessage: message.content || '',
+            assistantReply: nextMessage.content || ''
+          });
+          i++; // Skip the assistant message since we've already paired it
+        } else {
+          // User message without reply
+          conversationPairs.push({
+            timestamp: message.timestamp,
+            assistantType: message.assistants?.name || 'Unknown',
+            userMessage: message.content || '',
+            assistantReply: '[No reply yet]'
+          });
+        }
+      }
+    }
+
     // Create CSV rows
-    const rows = sortedMessages.map(message => {
-      const date = new Date(message.timestamp);
+    const rows = conversationPairs.map(pair => {
+      const date = new Date(pair.timestamp);
       return [
-        message.timestamp,
-        date.toLocaleDateString(),
-        date.toLocaleTimeString(),
-        message.profiles?.email || 'Unknown',
-        message.profiles?.full_name || '',
-        message.assistants?.name || 'Unknown',
-        message.role,
-        // Escape quotes and newlines in content
-        `"${(message.content || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-        message.conversation_id || '',
-        message.user_id,
-        message.assistant_id
+        `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`,
+        pair.assistantType,
+        // Escape quotes and preserve newlines with proper CSV formatting
+        `"${pair.userMessage.replace(/"/g, '""')}"`,
+        `"${pair.assistantReply.replace(/"/g, '""')}"`
       ];
     });
 
@@ -238,14 +258,14 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `messages-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `assistant-personality-analysis-${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // Download messages as JSON for detailed analysis
+  // Download messages as JSON for personality analysis
   const downloadMessagesJSON = () => {
     // Get filtered messages based on current filters
     const filteredMessages = initialMessages.filter(message => {
@@ -265,29 +285,57 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
-    // Create JSON export with metadata
+    // Group by assistant type for personality analysis
+    const assistantGroups: Record<string, Array<{
+      timestamp: string;
+      userMessage: string;
+      assistantReply: string;
+    }>> = {};
+
+    for (let i = 0; i < sortedMessages.length; i++) {
+      const message = sortedMessages[i];
+
+      if (message.role === 'user') {
+        const assistantName = message.assistants?.name || 'Unknown';
+
+        if (!assistantGroups[assistantName]) {
+          assistantGroups[assistantName] = [];
+        }
+
+        // Find the next assistant message
+        const nextMessage = sortedMessages[i + 1];
+        if (nextMessage && nextMessage.role === 'assistant') {
+          assistantGroups[assistantName].push({
+            timestamp: message.timestamp,
+            userMessage: message.content || '',
+            assistantReply: nextMessage.content || ''
+          });
+          i++; // Skip the assistant message since we've already paired it
+        } else {
+          // User message without reply
+          assistantGroups[assistantName].push({
+            timestamp: message.timestamp,
+            userMessage: message.content || '',
+            assistantReply: '[No reply yet]'
+          });
+        }
+      }
+    }
+
+    // Create JSON export focused on personality analysis
     const exportData = {
       exportDate: new Date().toISOString(),
-      totalMessages: sortedMessages.length,
+      purpose: 'Assistant Personality Analysis',
+      totalExchanges: sortedMessages.length / 2,
       filters: {
         user: selectedUser === 'all' ? 'All Users' : users.find(u => u.id === selectedUser)?.email || 'Unknown',
         assistant: selectedAssistant === 'all' ? 'All Assistants' : assistants.find(a => a.id === selectedAssistant)?.name || 'Unknown',
         searchQuery: searchQuery || 'None'
       },
-      messages: sortedMessages.map(message => ({
-        timestamp: message.timestamp,
-        user: {
-          id: message.user_id,
-          email: message.profiles?.email || 'Unknown',
-          fullName: message.profiles?.full_name || null
-        },
-        assistant: {
-          id: message.assistant_id,
-          name: message.assistants?.name || 'Unknown'
-        },
-        conversation_id: message.conversation_id,
-        role: message.role,
-        content: message.content
+      assistantPersonalities: Object.keys(assistantGroups).map(assistantName => ({
+        assistantType: assistantName,
+        totalExchanges: assistantGroups[assistantName].length,
+        conversations: assistantGroups[assistantName]
       }))
     };
 
@@ -296,7 +344,7 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `messages-export-${new Date().toISOString().split('T')[0]}.json`);
+    link.setAttribute('download', `assistant-personality-analysis-${new Date().toISOString().split('T')[0]}.json`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
