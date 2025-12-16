@@ -173,6 +173,136 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
     setSelectedConversation(null);
   };
 
+  // Download messages as CSV for research analysis
+  const downloadMessagesCSV = () => {
+    // Get filtered messages based on current filters
+    const filteredMessages = initialMessages.filter(message => {
+      if (selectedUser !== 'all' && message.user_id !== selectedUser) return false;
+      if (selectedAssistant !== 'all' && message.assistant_id !== selectedAssistant) return false;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesEmail = message.profiles?.email?.toLowerCase().includes(query);
+        const matchesName = message.profiles?.full_name?.toLowerCase().includes(query);
+        if (!matchesEmail && !matchesName) return false;
+      }
+      return true;
+    });
+
+    // Sort by timestamp
+    const sortedMessages = filteredMessages.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    // Create CSV header
+    const headers = [
+      'Timestamp',
+      'Date',
+      'Time',
+      'User Email',
+      'User Full Name',
+      'Assistant Name',
+      'Role',
+      'Message Content',
+      'Conversation ID',
+      'User ID',
+      'Assistant ID'
+    ];
+
+    // Create CSV rows
+    const rows = sortedMessages.map(message => {
+      const date = new Date(message.timestamp);
+      return [
+        message.timestamp,
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        message.profiles?.email || 'Unknown',
+        message.profiles?.full_name || '',
+        message.assistants?.name || 'Unknown',
+        message.role,
+        // Escape quotes and newlines in content
+        `"${(message.content || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+        message.conversation_id || '',
+        message.user_id,
+        message.assistant_id
+      ];
+    });
+
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `messages-export-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Download messages as JSON for detailed analysis
+  const downloadMessagesJSON = () => {
+    // Get filtered messages based on current filters
+    const filteredMessages = initialMessages.filter(message => {
+      if (selectedUser !== 'all' && message.user_id !== selectedUser) return false;
+      if (selectedAssistant !== 'all' && message.assistant_id !== selectedAssistant) return false;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesEmail = message.profiles?.email?.toLowerCase().includes(query);
+        const matchesName = message.profiles?.full_name?.toLowerCase().includes(query);
+        if (!matchesEmail && !matchesName) return false;
+      }
+      return true;
+    });
+
+    // Sort by timestamp
+    const sortedMessages = filteredMessages.sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    // Create JSON export with metadata
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      totalMessages: sortedMessages.length,
+      filters: {
+        user: selectedUser === 'all' ? 'All Users' : users.find(u => u.id === selectedUser)?.email || 'Unknown',
+        assistant: selectedAssistant === 'all' ? 'All Assistants' : assistants.find(a => a.id === selectedAssistant)?.name || 'Unknown',
+        searchQuery: searchQuery || 'None'
+      },
+      messages: sortedMessages.map(message => ({
+        timestamp: message.timestamp,
+        user: {
+          id: message.user_id,
+          email: message.profiles?.email || 'Unknown',
+          fullName: message.profiles?.full_name || null
+        },
+        assistant: {
+          id: message.assistant_id,
+          name: message.assistants?.name || 'Unknown'
+        },
+        conversation_id: message.conversation_id,
+        role: message.role,
+        content: message.content
+      }))
+    };
+
+    // Create blob and download
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `messages-export-${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="mt-8">
       {/* Filters */}
@@ -261,9 +391,34 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
             </div>
           </div>
 
-          <div className="mt-4 text-sm text-gray-500">
-            Showing {paginatedSummaries.length} of {filteredSummaries.length} users
-            ({initialMessages.length} total messages)
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-gray-500">
+              Showing {paginatedSummaries.length} of {filteredSummaries.length} users
+              ({initialMessages.length} total messages)
+            </div>
+
+            {/* Download Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={downloadMessagesCSV}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition"
+              >
+                <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download CSV
+              </button>
+
+              <button
+                onClick={downloadMessagesJSON}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition"
+              >
+                <svg className="h-5 w-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download JSON
+              </button>
+            </div>
           </div>
         </div>
       </div>
