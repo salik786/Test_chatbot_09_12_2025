@@ -186,11 +186,14 @@ export default function ChatInterface({ assistantName, isAdmin = false }: ChatIn
           let displayMessage = fullMessage;
           try {
             const jsonResponse = JSON.parse(fullMessage);
-            // Check for both "response" and "text" fields
+            // Check for simple text fields first
             if (jsonResponse.response) {
               displayMessage = jsonResponse.response;
             } else if (jsonResponse.text) {
               displayMessage = jsonResponse.text;
+            } else {
+              // Handle structured JSON - convert to readable format
+              displayMessage = JSON.stringify(jsonResponse, null, 2);
             }
           } catch {
             // If not valid JSON yet, display as-is (still streaming)
@@ -204,11 +207,14 @@ export default function ChatInterface({ assistantName, isAdmin = false }: ChatIn
         let finalContent = fullMessage;
         try {
           const jsonResponse = JSON.parse(fullMessage);
-          // Check for both "response" and "text" fields
+          // Check for simple text fields first
           if (jsonResponse.response) {
             finalContent = jsonResponse.response;
           } else if (jsonResponse.text) {
             finalContent = jsonResponse.text;
+          } else {
+            // Handle structured JSON - convert to readable format
+            finalContent = JSON.stringify(jsonResponse, null, 2);
           }
         } catch {
           // If not JSON, use full message as-is
