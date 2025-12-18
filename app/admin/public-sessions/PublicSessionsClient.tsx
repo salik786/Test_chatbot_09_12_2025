@@ -43,6 +43,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Get unique assistants for filter
   const assistants = Array.from(
@@ -205,6 +206,87 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
     link.click();
   };
 
+  const downloadFullChatsJSON = async () => {
+    // Collect all session data with messages
+    const allSessionsData = [];
+
+    for (const session of filteredSessions) {
+      try {
+        const response = await fetch(`/api/admin/public-sessions/${session.id}/messages`);
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        const assistant = Array.isArray(session.assistants) ? session.assistants[0] : session.assistants;
+
+        // Group messages into conversation pairs
+        const conversationPairs = [];
+        const messages = data.messages || [];
+
+        for (let i = 0; i < messages.length; i++) {
+          const message = messages[i];
+          if (message.role === 'user') {
+            const nextMessage = messages[i + 1];
+            conversationPairs.push({
+              userMessage: message.content || '',
+              assistantReply: (nextMessage && nextMessage.role === 'assistant')
+                ? nextMessage.content || ''
+                : '',
+              timestamp: message.created_at
+            });
+
+            if (nextMessage && nextMessage.role === 'assistant') {
+              i++; // Skip the assistant message since we've already paired it
+            }
+          }
+        }
+
+        allSessionsData.push({
+          sessionId: session.id.substring(0, 8),
+          fullSessionId: session.id,
+          assistant: assistant?.name || 'Unknown',
+          status: session.ended_at ? 'Ended' : 'Active',
+          messageCount: session.message_count,
+          duration: getDuration(session),
+          createdAt: session.created_at,
+          endedAt: session.ended_at,
+          lastActivityAt: session.last_activity_at,
+          conversations: conversationPairs
+        });
+      } catch (error) {
+        console.error(`Error loading messages for session ${session.id}:`, error);
+      }
+    }
+
+    // Group by assistant for personality analysis
+    const groupedByAssistant: { [key: string]: any[] } = {};
+    allSessionsData.forEach(session => {
+      if (!groupedByAssistant[session.assistant]) {
+        groupedByAssistant[session.assistant] = [];
+      }
+      groupedByAssistant[session.assistant].push(session);
+    });
+
+    const jsonData = {
+      exportDate: new Date().toISOString(),
+      totalSessions: allSessionsData.length,
+      assistants: Object.keys(groupedByAssistant).map(assistantName => ({
+        name: assistantName,
+        sessionCount: groupedByAssistant[assistantName].length,
+        totalConversations: groupedByAssistant[assistantName].reduce((sum, s) => sum + s.conversations.length, 0),
+        sessions: groupedByAssistant[assistantName]
+      })),
+      allSessions: allSessionsData
+    };
+
+    // Download JSON
+    const jsonString = JSON.stringify(jsonData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `public-sessions-export-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+  };
+
   // Calculate summary statistics
   const summaryStats = assistants.map(assistant => {
     const assistantSessions = sessions.filter(session => {
@@ -237,17 +319,25 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
 
   const getDuration = (session: PublicSession) => {
     const start = new Date(session.created_at);
-    const end = session.ended_at ? new Date(session.ended_at) : new Date();
+    // Use ended_at if session ended, otherwise use last_activity_at to show actual session duration
+    const end = session.ended_at
+      ? new Date(session.ended_at)
+      : new Date(session.last_activity_at);
     const durationMs = end.getTime() - start.getTime();
 
+    // Handle negative durations or very small durations
+    if (durationMs < 0) return '0s';
+
     const seconds = Math.floor(durationMs / 1000);
+    if (seconds < 1) return '0s';
     if (seconds < 60) return `${seconds}s`;
 
-    const minutes = Math.floor(durationMs / 60000);
+    const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m`;
 
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
+    if (remainingMinutes === 0) return `${hours}h`;
     return `${hours}h ${remainingMinutes}m`;
   };
 
@@ -291,78 +381,113 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
         ))}
       </div>
 
-      {/* Filters */}
+      {/* Filters and Actions Bar */}
       <div className="bg-white shadow sm:rounded-lg mb-6">
-        <div className="px-4 py-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div>
-              <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">
-                Filter by Status
-              </label>
-              <select
-                id="status-filter"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value as any)}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+        <div className="px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                <option value="all">All Sessions</option>
-                <option value="active">Active Only</option>
-                <option value="ended">Ended Only</option>
-              </select>
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                Filters
+                {(filterStatus !== 'all' || filterAssistant !== 'all') && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Active
+                  </span>
+                )}
+              </button>
+              <div className="text-sm text-gray-500">
+                Showing {paginatedSessions.length} of {filteredSessions.length} sessions
+                {filteredSessions.length !== sessions.length && ` (${sessions.length} total)`}
+              </div>
             </div>
-
-            <div>
-              <label htmlFor="assistant-filter" className="block text-sm font-medium text-gray-700">
-                Filter by Assistant
-              </label>
-              <select
-                id="assistant-filter"
-                value={filterAssistant}
-                onChange={(e) => setFilterAssistant(e.target.value)}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value="all">All Assistants</option>
-                {assistants.map((assistant) => (
-                  <option key={assistant.id} value={assistant.id}>
-                    {assistant.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="items-per-page" className="block text-sm font-medium text-gray-700">
-                Items per page
-              </label>
-              <select
-                id="items-per-page"
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
+            <div className="flex items-center gap-2">
               <button
                 onClick={downloadFullChats}
-                className="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
-                Download All Chats
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                CSV
+              </button>
+              <button
+                onClick={downloadFullChatsJSON}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                JSON
               </button>
             </div>
           </div>
-          <div className="mt-2 text-sm text-gray-500">
-            Showing {paginatedSessions.length} of {filteredSessions.length} sessions
-            {filteredSessions.length !== sessions.length && ` (${sessions.length} total)`}
-          </div>
+
+          {/* Collapsible Filters */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">
+                    Filter by Status
+                  </label>
+                  <select
+                    id="status-filter"
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value as any)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="all">All Sessions</option>
+                    <option value="active">Active Only</option>
+                    <option value="ended">Ended Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="assistant-filter" className="block text-sm font-medium text-gray-700">
+                    Filter by Assistant
+                  </label>
+                  <select
+                    id="assistant-filter"
+                    value={filterAssistant}
+                    onChange={(e) => setFilterAssistant(e.target.value)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="all">All Assistants</option>
+                    {assistants.map((assistant) => (
+                      <option key={assistant.id} value={assistant.id}>
+                        {assistant.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="items-per-page" className="block text-sm font-medium text-gray-700">
+                    Items per page
+                  </label>
+                  <select
+                    id="items-per-page"
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
