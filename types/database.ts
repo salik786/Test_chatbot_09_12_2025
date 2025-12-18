@@ -117,30 +117,68 @@ export interface Database {
       messages: {
         Row: {
           id: string;
-          user_id: string;
+          user_id: string | null;
           assistant_id: string;
           conversation_id: string | null;
+          session_id: string | null;
           role: 'user' | 'assistant';
           content: string;
           timestamp: string;
+          is_public: boolean;
         };
         Insert: {
           id?: string;
-          user_id: string;
+          user_id?: string | null;
           assistant_id: string;
           conversation_id?: string | null;
+          session_id?: string | null;
           role: 'user' | 'assistant';
           content: string;
           timestamp?: string;
+          is_public?: boolean;
         };
         Update: {
           id?: string;
-          user_id?: string;
+          user_id?: string | null;
           assistant_id?: string;
           conversation_id?: string | null;
+          session_id?: string | null;
           role?: 'user' | 'assistant';
           content?: string;
           timestamp?: string;
+          is_public?: boolean;
+        };
+      };
+      public_sessions: {
+        Row: {
+          id: string;
+          assistant_id: string;
+          session_token: string;
+          openai_thread_id: string | null;
+          created_at: string;
+          ended_at: string | null;
+          last_activity_at: string;
+          message_count: number;
+        };
+        Insert: {
+          id?: string;
+          assistant_id: string;
+          session_token: string;
+          openai_thread_id?: string | null;
+          created_at?: string;
+          ended_at?: string | null;
+          last_activity_at?: string;
+          message_count?: number;
+        };
+        Update: {
+          id?: string;
+          assistant_id?: string;
+          session_token?: string;
+          openai_thread_id?: string | null;
+          created_at?: string;
+          ended_at?: string | null;
+          last_activity_at?: string;
+          message_count?: number;
         };
       };
     };
