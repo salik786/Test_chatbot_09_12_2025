@@ -40,6 +40,9 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'ended'>('all');
   const [filterAssistant, setFilterAssistant] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Get unique assistants for filter
   const assistants = Array.from(
@@ -66,6 +69,17 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
     return true;
   });
 
+  // Paginate filtered sessions
+  const totalPages = Math.ceil(filteredSessions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSessions = filteredSessions.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, filterAssistant]);
+
   const loadSessionMessages = async (sessionId: string) => {
     setLoadingMessages(true);
     try {
@@ -90,6 +104,33 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
   const closeSession = () => {
     setSelectedSession(null);
     setMessages([]);
+  };
+
+  const deleteSession = async (sessionId: string, assistantName: string) => {
+    if (!confirm(`Are you sure you want to delete this ${assistantName} session? This will also delete all messages in this session. This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingId(sessionId);
+    try {
+      const response = await fetch('/api/admin/public-sessions/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete session');
+      }
+
+      // Remove from list
+      setSessions(sessions.filter(s => s.id !== sessionId));
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Failed to delete session. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const getStatusBadge = (session: PublicSession) => {
@@ -134,7 +175,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
       {/* Filters */}
       <div className="bg-white shadow sm:rounded-lg mb-6">
         <div className="px-4 py-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div>
               <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">
                 Filter by Status
@@ -170,9 +211,30 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
               </select>
             </div>
 
+            <div>
+              <label htmlFor="items-per-page" className="block text-sm font-medium text-gray-700">
+                Items per page
+              </label>
+              <select
+                id="items-per-page"
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
             <div className="flex items-end">
               <div className="text-sm text-gray-500">
-                Showing {filteredSessions.length} of {sessions.length} sessions
+                Showing {paginatedSessions.length} of {filteredSessions.length} sessions
+                {filteredSessions.length !== sessions.length && ` (${sessions.length} total)`}
               </div>
             </div>
           </div>
@@ -208,15 +270,16 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredSessions.length === 0 ? (
+            {paginatedSessions.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                   No public sessions found.
                 </td>
               </tr>
             ) : (
-              filteredSessions.map((session) => {
+              paginatedSessions.map((session) => {
                 const assistant = Array.isArray(session.assistants) ? session.assistants[0] : session.assistants;
+                const isDeleting = deletingId === session.id;
                 return (
                   <tr key={session.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -239,12 +302,20 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <ClientDateDisplay date={session.last_activity_at} />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
                       <button
                         onClick={() => openSession(session)}
                         className="text-blue-600 hover:text-blue-900"
+                        disabled={isDeleting}
                       >
                         View Messages
+                      </button>
+                      <button
+                        onClick={() => deleteSession(session.id, assistant?.name || 'Unknown')}
+                        disabled={isDeleting}
+                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                      >
+                        {isDeleting ? 'Deleting...' : 'Delete'}
                       </button>
                     </td>
                   </tr>
@@ -254,6 +325,98 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6 rounded-b-lg">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm text-gray-700">
+                Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(endIndex, filteredSessions.length)}</span> of{' '}
+                <span className="font-medium">{filteredSessions.length}</span> results
+              </p>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        currentPage === pageNum
+                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Last
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Modal */}
       {selectedSession && (
