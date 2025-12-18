@@ -133,6 +133,93 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
     }
   };
 
+  const downloadFullChats = async () => {
+    // Collect all session data with messages
+    const allSessionsData = [];
+
+    for (const session of filteredSessions) {
+      try {
+        const response = await fetch(`/api/admin/public-sessions/${session.id}/messages`);
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        const assistant = Array.isArray(session.assistants) ? session.assistants[0] : session.assistants;
+
+        allSessionsData.push({
+          sessionId: session.id.substring(0, 8),
+          assistant: assistant?.name || 'Unknown',
+          status: session.ended_at ? 'Ended' : 'Active',
+          messageCount: session.message_count,
+          duration: getDuration(session),
+          createdAt: new Date(session.created_at).toLocaleString(),
+          messages: data.messages || []
+        });
+      } catch (error) {
+        console.error(`Error loading messages for session ${session.id}:`, error);
+      }
+    }
+
+    // Create CSV with conversation pairs
+    const csvRows = [];
+    csvRows.push(['Session ID', 'Assistant', 'Status', 'Duration', 'Created At', 'User Message', 'Assistant Reply']);
+
+    allSessionsData.forEach(sessionData => {
+      const { sessionId, assistant, status, duration, createdAt, messages } = sessionData;
+
+      // Group messages into conversation pairs
+      for (let i = 0; i < messages.length; i++) {
+        const message = messages[i];
+        if (message.role === 'user') {
+          const nextMessage = messages[i + 1];
+          const userMessage = message.content?.replace(/"/g, '""') || '';
+          const assistantReply = (nextMessage && nextMessage.role === 'assistant')
+            ? nextMessage.content?.replace(/"/g, '""') || ''
+            : '';
+
+          csvRows.push([
+            sessionId,
+            assistant,
+            status,
+            duration,
+            createdAt,
+            `"${userMessage}"`,
+            `"${assistantReply}"`
+          ]);
+
+          if (nextMessage && nextMessage.role === 'assistant') {
+            i++; // Skip the assistant message since we've already paired it
+          }
+        }
+      }
+    });
+
+    // Convert to CSV string
+    const csvContent = csvRows.map(row => row.join(','));
+    const csvString = csvContent.join('\n');
+
+    // Download CSV
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `public-sessions-export-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  // Calculate summary statistics
+  const summaryStats = assistants.map(assistant => {
+    const assistantSessions = sessions.filter(session => {
+      const sessionAssistant = Array.isArray(session.assistants) ? session.assistants[0] : session.assistants;
+      return sessionAssistant?.id === assistant.id;
+    });
+
+    return {
+      name: assistant.name,
+      totalSessions: assistantSessions.length,
+      activeSessions: assistantSessions.filter(s => !s.ended_at).length,
+      totalMessages: assistantSessions.reduce((sum, s) => sum + s.message_count, 0)
+    };
+  });
+
   const getStatusBadge = (session: PublicSession) => {
     if (session.ended_at) {
       return (
@@ -153,6 +240,9 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
     const end = session.ended_at ? new Date(session.ended_at) : new Date();
     const durationMs = end.getTime() - start.getTime();
 
+    const seconds = Math.floor(durationMs / 1000);
+    if (seconds < 60) return `${seconds}s`;
+
     const minutes = Math.floor(durationMs / 60000);
     if (minutes < 60) return `${minutes}m`;
 
@@ -170,6 +260,35 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
             Anonymous chat sessions created via shareable links
           </p>
         </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        {summaryStats.map((stat) => (
+          <div key={stat.name} className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-1">
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    {stat.name}
+                  </dt>
+                  <dd className="mt-1 text-3xl font-semibold text-gray-900">
+                    {stat.totalSessions}
+                  </dd>
+                  <div className="mt-2 flex items-center text-sm text-gray-600">
+                    <span className="flex items-center">
+                      <span className="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                      {stat.activeSessions} active
+                    </span>
+                    <span className="ml-3">
+                      {stat.totalMessages} msgs
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Filters */}
@@ -232,11 +351,17 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
             </div>
 
             <div className="flex items-end">
-              <div className="text-sm text-gray-500">
-                Showing {paginatedSessions.length} of {filteredSessions.length} sessions
-                {filteredSessions.length !== sessions.length && ` (${sessions.length} total)`}
-              </div>
+              <button
+                onClick={downloadFullChats}
+                className="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Download All Chats
+              </button>
             </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            Showing {paginatedSessions.length} of {filteredSessions.length} sessions
+            {filteredSessions.length !== sessions.length && ` (${sessions.length} total)`}
           </div>
         </div>
       </div>
@@ -246,6 +371,9 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Session ID
+              </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Assistant
               </th>
@@ -272,7 +400,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedSessions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                   No public sessions found.
                 </td>
               </tr>
@@ -282,6 +410,11 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                 const isDeleting = deletingId === session.id;
                 return (
                   <tr key={session.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-xs font-mono text-gray-500">
+                        {session.id.substring(0, 8)}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {assistant?.name || 'Unknown'}
