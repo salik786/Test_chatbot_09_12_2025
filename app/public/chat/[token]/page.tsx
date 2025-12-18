@@ -9,39 +9,34 @@ interface PageProps {
 }
 
 export default async function PublicChatPage({ params }: PageProps) {
-  const { token } = params;
+  const { token: masterLinkToken } = params;
   const supabase = createServiceClient();
 
-  // Fetch session and assistant details
-  const { data: session, error: sessionError } = await supabase
-    .from('public_sessions')
-    .select(`
-      id,
-      assistant_id,
-      session_token,
-      openai_thread_id,
-      assistants (
-        id,
-        name,
-        description,
-        openai_assistant_id,
-        active
-      )
-    `)
-    .eq('session_token', token)
+  // Look up assistant by the permanent master link token
+  const { data: assistant, error: assistantError } = await supabase
+    .from('assistants')
+    .select('id, name, description, openai_assistant_id, active')
+    .eq('public_link_token', masterLinkToken)
     .single();
 
-  if (sessionError || !session) {
-    // Session not found or invalid token
-    redirect('/');
+  if (assistantError || !assistant) {
+    // Invalid link or assistant not found
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Invalid Link
+          </h1>
+          <p className="text-gray-600">
+            This chat link is invalid or has expired.
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const assistant = Array.isArray(session.assistants)
-    ? session.assistants[0]
-    : session.assistants;
-
-  if (!assistant || !assistant.active) {
-    // Assistant not found or inactive
+  if (!assistant.active) {
+    // Assistant is inactive
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
         <div className="text-center">
@@ -56,10 +51,39 @@ export default async function PublicChatPage({ params }: PageProps) {
     );
   }
 
+  // Create a NEW session for this visitor
+  const sessionToken = crypto.randomUUID();
+
+  const { data: newSession, error: sessionError } = await supabase
+    .from('public_sessions')
+    .insert({
+      assistant_id: assistant.id,
+      session_token: sessionToken,
+      master_link_token: masterLinkToken,
+    })
+    .select()
+    .single();
+
+  if (sessionError || !newSession) {
+    console.error('Error creating public session:', sessionError);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Error
+          </h1>
+          <p className="text-gray-600">
+            Failed to start chat session. Please try again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <PublicChatInterface
-      sessionId={session.id}
-      sessionToken={token}
+      sessionId={newSession.id}
+      sessionToken={sessionToken}
       assistantName={assistant.name}
       assistantDescription={assistant.description || ''}
     />

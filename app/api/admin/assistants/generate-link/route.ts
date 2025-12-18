@@ -31,10 +31,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify assistant exists
+    // Verify assistant exists and get/create permanent link token
     const { data: assistant, error: assistantError } = await supabase
       .from('assistants')
-      .select('id, name')
+      .select('id, name, public_link_token')
       .eq('id', assistantId)
       .single();
 
@@ -45,40 +45,37 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate a unique token for the public session
-    // Using crypto.randomUUID() for a secure, unique token
-    const sessionToken = crypto.randomUUID();
+    let linkToken = assistant.public_link_token;
 
-    // Create a public session record
-    const { data: session, error: sessionError } = await supabase
-      .from('public_sessions')
-      .insert({
-        assistant_id: assistantId,
-        session_token: sessionToken,
-      })
-      .select()
-      .single();
+    // If assistant doesn't have a permanent link token, create one
+    if (!linkToken) {
+      linkToken = crypto.randomUUID();
 
-    if (sessionError) {
-      console.error('Error creating public session:', sessionError);
-      return NextResponse.json(
-        { error: 'Failed to generate public link' },
-        { status: 500 }
-      );
+      const { error: updateError } = await supabase
+        .from('assistants')
+        .update({ public_link_token: linkToken })
+        .eq('id', assistantId);
+
+      if (updateError) {
+        console.error('Error updating assistant with link token:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to generate public link' },
+          { status: 500 }
+        );
+      }
     }
 
-    // Generate the public link
+    // Generate the public link using the permanent token
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ||
                     (request.headers.get('host')?.startsWith('localhost')
                       ? `http://${request.headers.get('host')}`
                       : `https://${request.headers.get('host')}`);
 
-    const publicLink = `${baseUrl}/public/chat/${sessionToken}`;
+    const publicLink = `${baseUrl}/public/chat/${linkToken}`;
 
     return NextResponse.json({
       success: true,
       link: publicLink,
-      sessionId: session.id,
       assistantName: assistant.name,
     });
 

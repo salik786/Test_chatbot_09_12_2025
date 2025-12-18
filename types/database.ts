@@ -35,6 +35,7 @@ export interface Database {
           openai_assistant_id: string;
           active: boolean;
           available_for_random_assignment: boolean;
+          public_link_token: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -45,6 +46,7 @@ export interface Database {
           openai_assistant_id: string;
           active?: boolean;
           available_for_random_assignment?: boolean;
+          public_link_token?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -55,6 +57,7 @@ export interface Database {
           openai_assistant_id?: string;
           active?: boolean;
           available_for_random_assignment?: boolean;
+          public_link_token?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -154,6 +157,7 @@ export interface Database {
           id: string;
           assistant_id: string;
           session_token: string;
+          master_link_token: string | null;
           openai_thread_id: string | null;
           created_at: string;
           ended_at: string | null;
@@ -164,6 +168,7 @@ export interface Database {
           id?: string;
           assistant_id: string;
           session_token: string;
+          master_link_token?: string | null;
           openai_thread_id?: string | null;
           created_at?: string;
           ended_at?: string | null;
@@ -174,6 +179,7 @@ export interface Database {
           id?: string;
           assistant_id?: string;
           session_token?: string;
+          master_link_token?: string | null;
           openai_thread_id?: string | null;
           created_at?: string;
           ended_at?: string | null;
