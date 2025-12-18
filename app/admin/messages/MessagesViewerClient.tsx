@@ -86,6 +86,9 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
     const userMap = new Map<string, UserConversationSummary>();
 
     initialMessages.forEach(message => {
+      // Skip public messages (those without a user_id)
+      if (!message.user_id) return;
+
       if (!userMap.has(message.user_id)) {
         userMap.set(message.user_id, {
           userId: message.user_id,
@@ -98,7 +101,7 @@ export default function MessagesViewerClient({ messages: initialMessages, users,
         });
       }
 
-      const summary = userMap.get(message.user_id)!;
+      const summary = userMap.get(message.user_id)!
       summary.totalMessages++;
 
       if (new Date(message.timestamp) > new Date(summary.lastMessageTime)) {
