@@ -20,6 +20,7 @@ export default function AssistantManagementClient({ assistants: initialAssistant
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAssistant, setEditingAssistant] = useState<AssistantWithStats | null>(null);
+  const [publicLink, setPublicLink] = useState<{ assistantId: string; link: string } | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -169,6 +170,34 @@ export default function AssistantManagementClient({ assistants: initialAssistant
       available_for_random_assignment: assistant.available_for_random_assignment,
     });
     setShowAddForm(true);
+  };
+
+  const handleGeneratePublicLink = async (assistantId: string) => {
+    setLoading(assistantId);
+    try {
+      const response = await fetch('/api/admin/assistants/generate-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assistantId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate public link');
+      }
+
+      const { link } = await response.json();
+      setPublicLink({ assistantId, link });
+      showMessage('success', 'Public link generated successfully');
+    } catch (error) {
+      showMessage('error', 'Failed to generate public link');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    showMessage('success', 'Link copied to clipboard!');
   };
 
   return (
@@ -353,7 +382,15 @@ export default function AssistantManagementClient({ assistants: initialAssistant
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {assistant.messageCount}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
+                  <button
+                    onClick={() => handleGeneratePublicLink(assistant.id)}
+                    disabled={loading === assistant.id}
+                    className="text-purple-600 hover:text-purple-900 disabled:opacity-50"
+                    title="Generate shareable public link"
+                  >
+                    Get Link
+                  </button>
                   <button
                     onClick={() => startEdit(assistant)}
                     disabled={loading === assistant.id}
@@ -374,6 +411,62 @@ export default function AssistantManagementClient({ assistants: initialAssistant
           </tbody>
         </table>
       </div>
+
+      {/* Public Link Modal */}
+      {publicLink && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Shareable Public Link</h3>
+              <button
+                onClick={() => setPublicLink(null)}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-3">
+                Share this link with anyone to allow them to chat with this assistant without signing up.
+                Each click creates a new anonymous session.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={publicLink.link}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm font-mono"
+                />
+                <button
+                  onClick={() => copyToClipboard(publicLink.link)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> Anonymous sessions are tracked separately from authenticated users.
+                You can view all public sessions in the "Public Sessions" section of the admin panel.
+              </p>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setPublicLink(null)}
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
