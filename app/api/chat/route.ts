@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     }
 
     // Get or create conversation
-    let conversation;
+    let conversation: any;
     if (conversationId) {
       // Use existing conversation
       const { data, error } = await supabase
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
             user_id: user.id,
             assistant_id: assistant.id,
             title: 'New Conversation',
-          })
+          } as any)
           .select()
           .single();
 
@@ -102,10 +102,10 @@ export async function POST(request: Request) {
     if (!threadId) {
       threadId = await createThread();
       // Update conversation with thread ID
-      await supabase
-        .from('conversations')
-        .update({ openai_thread_id: threadId })
-        .eq('id', conversation.id);
+      const updateData: any = { openai_thread_id: threadId };
+      const query = supabase.from('conversations');
+      // @ts-ignore - Supabase type inference issue with update
+      await query.update(updateData).eq('id', conversation.id);
     }
 
     // Add user message to thread

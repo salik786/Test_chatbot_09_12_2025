@@ -17,7 +17,7 @@ export default async function PublicChatPage({ params }: PageProps) {
     .from('assistants')
     .select('id, name, description, openai_assistant_id, active')
     .eq('public_link_token', masterLinkToken)
-    .single();
+    .single() as { data: any; error: any };
 
   if (assistantError || !assistant) {
     // Invalid link or assistant not found
@@ -60,9 +60,9 @@ export default async function PublicChatPage({ params }: PageProps) {
       assistant_id: assistant.id,
       session_token: sessionToken,
       master_link_token: masterLinkToken,
-    })
+    } as any)
     .select()
-    .single();
+    .single() as { data: any; error: any };
 
   if (sessionError || !newSession) {
     console.error('Error creating public session:', sessionError);

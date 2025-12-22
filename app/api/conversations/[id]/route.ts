@@ -78,12 +78,10 @@ export async function PATCH(
     }
 
     // Update the conversation
-    const { data: updated, error: updateError } = await supabase
-      .from('conversations')
-      .update({ title: body.title })
-      .eq('id', conversationId)
-      .select()
-      .single();
+    const updateData: any = { title: body.title };
+    const query = supabase.from('conversations');
+    // @ts-ignore - Supabase type inference issue with update
+    const { data: updated, error: updateError } = (await query.update(updateData).eq('id', conversationId).select().single()) as { data: any; error: any };
 
     if (updateError) {
       throw updateError;

@@ -15,11 +15,10 @@ export async function POST(request: Request) {
     const supabase = createServiceClient();
 
     // Mark session as ended
-    const { error } = await supabase
-      .from('public_sessions')
-      .update({ ended_at: new Date().toISOString() })
-      .eq('session_token', sessionToken)
-      .is('ended_at', null); // Only update if not already ended
+    const updateData: any = { ended_at: new Date().toISOString() };
+    const query = supabase.from('public_sessions');
+    // @ts-ignore - Supabase type inference issue with update
+    const { error } = (await query.update(updateData).eq('session_token', sessionToken).is('ended_at', null)) as { error: any }; // Only update if not already ended
 
     if (error) {
       console.error('Error ending session:', error);

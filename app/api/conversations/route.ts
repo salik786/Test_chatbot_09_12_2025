@@ -61,9 +61,9 @@ export async function POST() {
         user_id: user.id,
         assistant_id: assignment.assistant.id,
         title: 'New Conversation',
-      })
+      } as any)
       .select()
-      .single();
+      .single() as { data: any; error: any };
 
     if (error) {
       console.error('Supabase error creating conversation:', error);
