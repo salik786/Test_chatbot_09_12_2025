@@ -22,7 +22,7 @@ export default async function ChatPage() {
       assistant:assistants(*)
     `)
     .eq('user_id', user.id)
-    .single();
+    .single() as { data: any };
 
   const profile = await getUserProfile(user.id);
 

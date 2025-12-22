@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         )
       `)
       .eq('session_token', sessionToken)
-      .single();
+      .single() as { data: any; error: any };
 
     if (sessionError || !session) {
       return NextResponse.json(
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
     if (!threadId) {
       threadId = await createThread();
       // Update session with thread ID
-      await supabase
-        .from('public_sessions')
-        .update({ openai_thread_id: threadId })
-        .eq('id', session.id);
+      const updateData: any = { openai_thread_id: threadId };
+      const query = supabase.from('public_sessions');
+      // @ts-ignore - Supabase type inference issue with update
+      await query.update(updateData).eq('id', session.id);
     }
 
     // Add user message to thread
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       role: 'user',
       content: message,
       is_public: true,
-    });
+    } as any);
 
     // Run assistant and stream response
     const run = await runAssistantStream(threadId, assistant.openai_assistant_id);
@@ -168,7 +168,7 @@ export async function POST(request: Request) {
                   role: 'assistant',
                   content: contentToSave,
                   is_public: true,
-                });
+                } as any);
               } else {
                 console.warn('Run completed but no response captured');
               }

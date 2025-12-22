@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       .from('profiles')
       .select('id, email, is_admin')
       .eq('id', userId)
-      .single();
+      .single() as { data: { id: string; email: string; is_admin: boolean } | null; error: any };
 
     // If profile doesn't exist, create it manually
     if (profileCheckError || !profile) {
@@ -71,9 +71,9 @@ export async function POST(request: Request) {
           id: userId,
           email: userEmail,
           is_admin: isAdmin || false,
-        })
+        } as any)
         .select()
-        .single();
+        .single() as { data: { id: string; email: string; is_admin: boolean } | null; error: any };
 
       if (profileCreateError) {
         console.error('❌ Failed to create profile:', profileCreateError);
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
         );
       }
 
-      profile = newProfile;
+      profile = newProfile!;
       console.log('✅ Profile created manually:', profile);
     } else {
       console.log('✅ Profile created by trigger:', profile);
@@ -101,11 +101,12 @@ export async function POST(request: Request) {
       console.warn('⚠️ Trigger did not create assignment. Creating manually with round-robin...');
 
       // Get the assistant with the FEWEST assigned users (round-robin)
+      type AssistantData = { id: string; name: string; openai_assistant_id: string; active: boolean; available_for_random_assignment: boolean };
       const { data: assistantCounts, error: countsError } = await serviceSupabase
         .from('assistants')
         .select('id, name, openai_assistant_id, active, available_for_random_assignment')
         .eq('active', true)
-        .eq('available_for_random_assignment', true);
+        .eq('available_for_random_assignment', true) as { data: AssistantData[] | null; error: any };
 
       if (countsError || !assistantCounts || assistantCounts.length === 0) {
         console.error('❌ No assistants available:', countsError);
@@ -134,15 +135,15 @@ export async function POST(request: Request) {
       console.log('📌 Assigning to assistant with round-robin:', selectedAssistant.name, 'Current users:', userCounts[selectedAssistant.id]);
 
       // Create the assignment
-      const { data: newAssignment, error: assignmentCreateError } = await serviceSupabase
+      const { data: newAssignment, error: assignmentCreateError} = await serviceSupabase
         .from('user_assistant')
         .insert({
           user_id: userId,
           assistant_id: selectedAssistant.id,
           assigned_by: null,
-        })
+        } as any)
         .select('id, assistant_id, assistants(id, name, openai_assistant_id)')
-        .single();
+        .single() as { data: any; error: any };
 
       if (assignmentCreateError) {
         console.error('❌ Failed to create assignment:', assignmentCreateError);
@@ -171,7 +172,7 @@ export async function POST(request: Request) {
         userId,
         profileCreated: !!profile,
         assignmentCreated: !!assignment,
-        assistantName: assignment?.assistants?.name || 'None',
+        assistantName: (assignment as any)?.assistants?.name || 'None',
       },
     });
   } catch (error) {

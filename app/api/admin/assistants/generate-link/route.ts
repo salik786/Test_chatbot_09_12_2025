@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       .from('assistants')
       .select('id, name, public_link_token')
       .eq('id', assistantId)
-      .single();
+      .single() as { data: { id: string; name: string; public_link_token: string | null } | null; error: any };
 
     if (assistantError || !assistant) {
       return NextResponse.json(
@@ -51,10 +51,10 @@ export async function POST(request: Request) {
     if (!linkToken) {
       linkToken = crypto.randomUUID();
 
-      const { error: updateError } = await supabase
-        .from('assistants')
-        .update({ public_link_token: linkToken })
-        .eq('id', assistantId);
+      const updateData: any = { public_link_token: linkToken };
+      const query = supabase.from('assistants');
+      // @ts-ignore - Supabase type inference issue with update
+      const { error: updateError } = (await query.update(updateData).eq('id', assistantId)) as { error: any };
 
       if (updateError) {
         console.error('Error updating assistant with link token:', updateError);
