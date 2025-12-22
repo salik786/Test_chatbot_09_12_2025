@@ -59,12 +59,13 @@ async function getAdminStats() {
     .from('messages')
     .select('user_id')
     .eq('role', 'user')
-    .not('user_id', 'is', null);
+    .not('user_id', 'is', null) as { data: { user_id: string }[] | null };
 
   const messagesPerUser: Record<string, number> = {};
   userMessageCounts?.forEach((msg) => {
-    if (msg.user_id) {
-      messagesPerUser[msg.user_id] = (messagesPerUser[msg.user_id] || 0) + 1;
+    const userId = msg.user_id;
+    if (userId) {
+      messagesPerUser[userId] = (messagesPerUser[userId] || 0) + 1;
     }
   });
 
