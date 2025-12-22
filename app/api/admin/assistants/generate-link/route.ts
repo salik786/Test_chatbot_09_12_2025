@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       .from('profiles')
       .select('is_admin')
       .eq('id', user.id)
-      .single();
+      .single() as { data: { is_admin: boolean } | null };
 
     if (!profile?.is_admin) {
       return NextResponse.json(
