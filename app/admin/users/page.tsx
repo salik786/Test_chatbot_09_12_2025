@@ -49,11 +49,11 @@ async function getUsersWithAssistants() {
     const { data: simpleProfiles } = await supabase
       .from('profiles')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as { data: Profile[] | null };
 
     if (simpleProfiles && simpleProfiles.length > 0) {
       // Transform to expected format with empty user_assistant
-      return simpleProfiles.map(p => ({ ...p, user_assistant: [] }));
+      return simpleProfiles.map((p: Profile) => ({ ...p, user_assistant: [] }));
     }
 
     return [];
