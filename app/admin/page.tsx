@@ -54,15 +54,18 @@ async function getAdminStats() {
     usersPerAssistant[name] = (usersPerAssistant[name] || 0) + 1;
   });
 
-  // Get user engagement levels
+  // Get user engagement levels (only authenticated user messages, not public messages)
   const { data: userMessageCounts } = await supabase
     .from('messages')
     .select('user_id')
-    .eq('role', 'user');
+    .eq('role', 'user')
+    .not('user_id', 'is', null);
 
   const messagesPerUser: Record<string, number> = {};
   userMessageCounts?.forEach((msg) => {
-    messagesPerUser[msg.user_id] = (messagesPerUser[msg.user_id] || 0) + 1;
+    if (msg.user_id) {
+      messagesPerUser[msg.user_id] = (messagesPerUser[msg.user_id] || 0) + 1;
+    }
   });
 
   const engagement = {
