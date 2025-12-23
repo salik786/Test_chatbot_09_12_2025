@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Database } from '@/types/database';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Message = Database['public']['Tables']['messages']['Row'];
 
@@ -234,10 +236,38 @@ export default function PublicChatInterface({
                     <span className="text-xs font-semibold text-gray-600">Assistant</span>
                   </div>
                 )}
-                <div className={`text-xs sm:text-sm whitespace-pre-wrap break-words leading-relaxed ${
+                <div className={`text-xs sm:text-sm break-words leading-relaxed ${
                   message.role === 'user' ? 'text-white' : 'text-gray-800'
-                }`}>
-                  {message.content}
+                } prose prose-sm max-w-none ${message.role === 'user' ? 'prose-invert' : ''}`}>
+                  {message.role === 'user' ? (
+                    <div className="whitespace-pre-wrap">{message.content}</div>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h1: ({ node, ...props }) => <h1 className="text-base sm:text-lg font-bold mt-2 mb-1" {...props} />,
+                        h2: ({ node, ...props }) => <h2 className="text-sm sm:text-base font-bold mt-2 mb-1" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-xs sm:text-sm font-semibold mt-1 mb-1" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-0.5 my-1" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-0.5 my-1" {...props} />,
+                        li: ({ node, ...props }) => <li className="ml-1" {...props} />,
+                        p: ({ node, ...props }) => <p className="mb-1 last:mb-0" {...props} />,
+                        code: ({ node, inline, ...props }: any) =>
+                          inline ? (
+                            <code className="bg-gray-100 text-gray-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
+                          ) : (
+                            <code className="block bg-gray-100 text-gray-800 p-2 rounded my-1 overflow-x-auto text-xs font-mono" {...props} />
+                          ),
+                        a: ({ node, ...props }) => <a className="text-blue-600 hover:text-blue-700 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                        blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-gray-300 pl-2 italic my-1" {...props} />,
+                        hr: ({ node, ...props }) => <hr className="my-2 border-gray-300" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
+                        em: ({ node, ...props }) => <em className="italic" {...props} />,
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  )}
                 </div>
               </div>
             </div>
@@ -255,8 +285,32 @@ export default function PublicChatInterface({
                   </div>
                   <span className="text-xs font-semibold text-gray-600">Assistant</span>
                 </div>
-                <div className="text-xs sm:text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
-                  {streamingMessage}
+                <div className="text-xs sm:text-sm text-gray-800 break-words leading-relaxed prose prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h1: ({ node, ...props }) => <h1 className="text-base sm:text-lg font-bold mt-2 mb-1" {...props} />,
+                      h2: ({ node, ...props }) => <h2 className="text-sm sm:text-base font-bold mt-2 mb-1" {...props} />,
+                      h3: ({ node, ...props }) => <h3 className="text-xs sm:text-sm font-semibold mt-1 mb-1" {...props} />,
+                      ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-0.5 my-1" {...props} />,
+                      ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-0.5 my-1" {...props} />,
+                      li: ({ node, ...props }) => <li className="ml-1" {...props} />,
+                      p: ({ node, ...props }) => <p className="mb-1 last:mb-0" {...props} />,
+                      code: ({ node, inline, ...props }: any) =>
+                        inline ? (
+                          <code className="bg-gray-100 text-gray-800 px-1 py-0.5 rounded text-xs font-mono" {...props} />
+                        ) : (
+                          <code className="block bg-gray-100 text-gray-800 p-2 rounded my-1 overflow-x-auto text-xs font-mono" {...props} />
+                        ),
+                      a: ({ node, ...props }) => <a className="text-blue-600 hover:text-blue-700 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                      blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-gray-300 pl-2 italic my-1" {...props} />,
+                      hr: ({ node, ...props }) => <hr className="my-2 border-gray-300" {...props} />,
+                      strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
+                      em: ({ node, ...props }) => <em className="italic" {...props} />,
+                    }}
+                  >
+                    {streamingMessage}
+                  </ReactMarkdown>
                 </div>
                 <div className="flex items-center gap-1 mt-1.5 sm:mt-2">
                   <span className="text-xs text-purple-600 font-medium">Typing</span>
