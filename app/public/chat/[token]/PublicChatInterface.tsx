@@ -104,40 +104,62 @@ export default function PublicChatInterface({
           const chunk = decoder.decode(value, { stream: true });
           fullMessage += chunk;
 
-          // Try to parse JSON and extract response or text field for display
+          // Safely try to parse JSON and extract response or text field for display
           let displayMessage = fullMessage;
           try {
-            const jsonResponse = JSON.parse(fullMessage);
-            if (jsonResponse.response) {
-              displayMessage = jsonResponse.response;
-            } else if (jsonResponse.text) {
-              displayMessage = jsonResponse.text;
+            const trimmed = fullMessage.trim();
+            // Only try to parse if it looks like complete JSON
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+                (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+              const jsonResponse = JSON.parse(trimmed);
+              if (jsonResponse && typeof jsonResponse === 'object') {
+                if (jsonResponse.response) {
+                  displayMessage = jsonResponse.response;
+                } else if (jsonResponse.text) {
+                  displayMessage = jsonResponse.text;
+                } else if (jsonResponse.message) {
+                  displayMessage = jsonResponse.message;
+                } else {
+                  // Handle structured JSON - convert to readable format
+                  displayMessage = JSON.stringify(jsonResponse, null, 2);
+                }
+              }
             } else {
-              // Handle structured JSON - convert to readable format
-              displayMessage = JSON.stringify(jsonResponse, null, 2);
+              // Not complete JSON yet, display as-is (still streaming)
+              displayMessage = fullMessage;
             }
-          } catch {
-            // If not valid JSON yet, display as-is (still streaming)
+          } catch (error) {
+            // If JSON parsing fails, display as-is (still streaming)
+            console.debug('Streaming partial content, not yet valid JSON');
             displayMessage = fullMessage;
           }
 
           setStreamingMessage(displayMessage);
         }
 
-        // Parse final message for storage
+        // Safely parse final message for storage
         let finalContent = fullMessage;
         try {
-          const jsonResponse = JSON.parse(fullMessage);
-          if (jsonResponse.response) {
-            finalContent = jsonResponse.response;
-          } else if (jsonResponse.text) {
-            finalContent = jsonResponse.text;
-          } else {
-            // Handle structured JSON - convert to readable format
-            finalContent = JSON.stringify(jsonResponse, null, 2);
+          const trimmed = fullMessage.trim();
+          // Only try to parse if it looks like JSON
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            const jsonResponse = JSON.parse(trimmed);
+            if (jsonResponse && typeof jsonResponse === 'object') {
+              if (jsonResponse.response) {
+                finalContent = jsonResponse.response;
+              } else if (jsonResponse.text) {
+                finalContent = jsonResponse.text;
+              } else if (jsonResponse.message) {
+                finalContent = jsonResponse.message;
+              } else {
+                // Handle structured JSON - convert to readable format
+                finalContent = JSON.stringify(jsonResponse, null, 2);
+              }
+            }
           }
-        } catch {
-          // If not JSON, use full message as-is
+        } catch (error) {
+          // If JSON parsing fails, use full message as-is
+          console.debug('Final message not JSON, using as-is');
           finalContent = fullMessage;
         }
 

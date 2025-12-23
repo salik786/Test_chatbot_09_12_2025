@@ -9,16 +9,28 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
-  // Parse JSON responses to extract the "response" field
-  let displayContent = message.content;
-  if (!isUser && message.content) {
+  // Safely parse JSON responses to extract the "response" field
+  let displayContent = message.content || '';
+
+  if (!isUser && displayContent) {
     try {
-      const jsonContent = JSON.parse(message.content);
-      if (jsonContent.response) {
-        displayContent = jsonContent.response;
+      // Only try to parse if it looks like JSON
+      const trimmed = displayContent.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        const jsonContent = JSON.parse(trimmed);
+        if (jsonContent && typeof jsonContent === 'object') {
+          if (jsonContent.response) {
+            displayContent = jsonContent.response;
+          } else if (jsonContent.text) {
+            displayContent = jsonContent.text;
+          } else if (jsonContent.message) {
+            displayContent = jsonContent.message;
+          }
+        }
       }
-    } catch {
-      // If not JSON, display as-is
+    } catch (error) {
+      // If JSON parsing fails, use content as-is
+      console.debug('Not JSON content, displaying as-is');
       displayContent = message.content;
     }
   }

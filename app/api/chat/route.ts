@@ -8,11 +8,32 @@ import { createThread, addMessageToThread, runAssistantStream } from '@/lib/open
 export async function POST(request: Request) {
   try {
     const user = await requireAuth();
-    const { message, conversationId } = await request.json();
 
-    if (!message || typeof message !== 'string') {
+    // Safely parse request body
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
       return NextResponse.json(
-        { error: 'Message is required' },
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
+    const { message, conversationId } = body;
+
+    // Validate message
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Message is required and cannot be empty' },
+        { status: 400 }
+      );
+    }
+
+    // Validate message length (prevent extremely long messages)
+    if (message.length > 10000) {
+      return NextResponse.json(
+        { error: 'Message is too long. Maximum 10,000 characters allowed.' },
         { status: 400 }
       );
     }
@@ -186,21 +207,30 @@ export async function POST(request: Request) {
             if (event.event === 'thread.run.completed') {
               // Save assistant message to database
               if (fullResponse) {
-                // Parse JSON to extract readable content for storage
+                // Safely parse JSON to extract readable content for storage
                 let contentToSave = fullResponse;
                 try {
-                  const jsonContent = JSON.parse(fullResponse);
-                  // Check for simple text fields first
-                  if (jsonContent.response) {
-                    contentToSave = jsonContent.response;
-                  } else if (jsonContent.text) {
-                    contentToSave = jsonContent.text;
-                  } else {
-                    // Handle structured JSON - convert to readable markdown format
-                    contentToSave = JSON.stringify(jsonContent, null, 2);
+                  const trimmed = fullResponse.trim();
+                  // Only try to parse if it looks like JSON
+                  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    const jsonContent = JSON.parse(trimmed);
+                    if (jsonContent && typeof jsonContent === 'object') {
+                      // Check for simple text fields first
+                      if (jsonContent.response) {
+                        contentToSave = jsonContent.response;
+                      } else if (jsonContent.text) {
+                        contentToSave = jsonContent.text;
+                      } else if (jsonContent.message) {
+                        contentToSave = jsonContent.message;
+                      } else {
+                        // Handle structured JSON - convert to readable markdown format
+                        contentToSave = JSON.stringify(jsonContent, null, 2);
+                      }
+                    }
                   }
-                } catch {
+                } catch (error) {
                   // Not JSON or parse failed, save as-is
+                  console.debug('Response not JSON, saving as-is', error);
                   contentToSave = fullResponse;
                 }
 
