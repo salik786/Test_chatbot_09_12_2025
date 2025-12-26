@@ -84,8 +84,8 @@ export default async function PublicChatPage({ params }: PageProps) {
     <PublicChatInterface
       sessionId={newSession.id}
       sessionToken={sessionToken}
-      assistantName={assistant.name}
-      assistantDescription={assistant.description || ''}
+      assistantName="ChatBot"
+      assistantDescription="Your AI assistant ready to help you"
     />
   );
 }
