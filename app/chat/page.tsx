@@ -68,5 +68,5 @@ export default async function ChatPage() {
     );
   }
 
-  return <ChatInterface assistantName={assignment.assistant.name} isAdmin={profile?.is_admin || false} />;
+  return <ChatInterface assistantName="ChatBot" isAdmin={profile?.is_admin || false} />;
 }

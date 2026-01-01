@@ -1,4 +1,6 @@
 import { Message } from '@/types/message';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface MessageBubbleProps {
   message: Message;
@@ -7,16 +9,28 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user';
 
-  // Parse JSON responses to extract the "response" field
-  let displayContent = message.content;
-  if (!isUser && message.content) {
+  // Safely parse JSON responses to extract the "response" field
+  let displayContent = message.content || '';
+
+  if (!isUser && displayContent) {
     try {
-      const jsonContent = JSON.parse(message.content);
-      if (jsonContent.response) {
-        displayContent = jsonContent.response;
+      // Only try to parse if it looks like JSON
+      const trimmed = displayContent.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        const jsonContent = JSON.parse(trimmed);
+        if (jsonContent && typeof jsonContent === 'object') {
+          if (jsonContent.response) {
+            displayContent = jsonContent.response;
+          } else if (jsonContent.text) {
+            displayContent = jsonContent.text;
+          } else if (jsonContent.message) {
+            displayContent = jsonContent.message;
+          }
+        }
       }
-    } catch {
-      // If not JSON, display as-is
+    } catch (error) {
+      // If JSON parsing fails, use content as-is
+      console.debug('Not JSON content, displaying as-is');
       displayContent = message.content;
     }
   }
@@ -50,8 +64,47 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             <span className="text-xs font-semibold text-white/90">You</span>
           </div>
         )}
-        <div className={`text-sm md:text-base whitespace-pre-wrap break-words leading-relaxed ${isUser ? 'text-white' : 'text-gray-800'}`}>
-          {displayContent}
+        <div className={`text-sm md:text-base break-words leading-relaxed ${isUser ? 'text-white' : 'text-gray-800'} prose prose-sm md:prose-base max-w-none ${isUser ? 'prose-invert' : ''}`}>
+          {isUser ? (
+            // User messages: plain text with line breaks
+            <div className="whitespace-pre-wrap">{displayContent}</div>
+          ) : (
+            // Assistant messages: render as markdown
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // Style headings
+                h1: ({ node, ...props }) => <h1 className="text-xl md:text-2xl font-bold mt-4 mb-2" {...props} />,
+                h2: ({ node, ...props }) => <h2 className="text-lg md:text-xl font-bold mt-3 mb-2" {...props} />,
+                h3: ({ node, ...props }) => <h3 className="text-base md:text-lg font-semibold mt-2 mb-1" {...props} />,
+                // Style lists
+                ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2" {...props} />,
+                ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1 my-2" {...props} />,
+                li: ({ node, ...props }) => <li className="ml-2" {...props} />,
+                // Style paragraphs
+                p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                // Style code blocks
+                code: ({ node, inline, ...props }: any) =>
+                  inline ? (
+                    <code className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono" {...props} />
+                  ) : (
+                    <code className="block bg-gray-100 text-gray-800 p-3 rounded-lg my-2 overflow-x-auto text-sm font-mono" {...props} />
+                  ),
+                // Style links
+                a: ({ node, ...props }) => <a className="text-blue-600 hover:text-blue-700 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                // Style blockquotes
+                blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic my-2" {...props} />,
+                // Style horizontal rules
+                hr: ({ node, ...props }) => <hr className="my-4 border-gray-300" {...props} />,
+                // Style strong/bold
+                strong: ({ node, ...props }) => <strong className="font-bold" {...props} />,
+                // Style emphasis/italic
+                em: ({ node, ...props }) => <em className="italic" {...props} />,
+              }}
+            >
+              {displayContent}
+            </ReactMarkdown>
+          )}
         </div>
         <div className={`text-xs mt-2 flex items-center gap-1 ${isUser ? 'text-white/70' : 'text-gray-500'}`}>
           <svg className="h-3 w-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
