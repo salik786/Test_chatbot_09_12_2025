@@ -22,30 +22,48 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const { sessionId } = await request.json();
+    const body = await request.json();
+    const { sessionId, sessionIds } = body;
 
-    if (!sessionId) {
+    // Support both single and bulk deletion
+    if (!sessionId && (!sessionIds || sessionIds.length === 0)) {
       return NextResponse.json(
-        { error: 'Session ID is required' },
+        { error: 'Session ID(s) required' },
         { status: 400 }
       );
     }
 
-    // Delete the public session (messages will be cascade deleted)
-    const { error: deleteError } = await supabase
-      .from('public_sessions')
-      .delete()
-      .eq('id', sessionId);
+    // Delete the public session(s) (messages will be cascade deleted)
+    let deleteError;
+
+    if (sessionIds && Array.isArray(sessionIds)) {
+      // Bulk deletion
+      const { error } = await supabase
+        .from('public_sessions')
+        .delete()
+        .in('id', sessionIds);
+      deleteError = error;
+    } else {
+      // Single deletion
+      const { error } = await supabase
+        .from('public_sessions')
+        .delete()
+        .eq('id', sessionId);
+      deleteError = error;
+    }
 
     if (deleteError) {
-      console.error('Error deleting public session:', deleteError);
+      console.error('Error deleting public session(s):', deleteError);
       return NextResponse.json(
-        { error: 'Failed to delete session' },
+        { error: 'Failed to delete session(s)' },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      deleted: sessionIds ? sessionIds.length : 1
+    });
 
   } catch (error) {
     console.error('Error in delete session endpoint:', error);
