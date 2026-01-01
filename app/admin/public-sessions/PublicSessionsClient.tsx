@@ -40,10 +40,13 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'ended'>('all');
   const [filterAssistant, setFilterAssistant] = useState<string>('all');
+  const [filterMessages, setFilterMessages] = useState<'all' | 'empty' | 'with_messages'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Get unique assistants for filter
   const assistants = Array.from(
@@ -67,6 +70,9 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
       if (!assistant || assistant.id !== filterAssistant) return false;
     }
 
+    if (filterMessages === 'empty' && session.message_count > 0) return false;
+    if (filterMessages === 'with_messages' && session.message_count === 0) return false;
+
     return true;
   });
 
@@ -79,7 +85,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterStatus, filterAssistant]);
+  }, [filterStatus, filterAssistant, filterMessages]);
 
   const loadSessionMessages = async (sessionId: string) => {
     setLoadingMessages(true);
@@ -131,6 +137,54 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
       alert('Failed to delete session. Please try again.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const toggleSessionSelection = (sessionId: string) => {
+    const newSelected = new Set(selectedSessions);
+    if (newSelected.has(sessionId)) {
+      newSelected.delete(sessionId);
+    } else {
+      newSelected.add(sessionId);
+    }
+    setSelectedSessions(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedSessions.size === paginatedSessions.length) {
+      setSelectedSessions(new Set());
+    } else {
+      setSelectedSessions(new Set(paginatedSessions.map(s => s.id)));
+    }
+  };
+
+  const bulkDeleteSessions = async () => {
+    if (selectedSessions.size === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedSessions.size} session(s)? This will also delete all messages in these sessions. This action cannot be undone.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch('/api/admin/public-sessions/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionIds: Array.from(selectedSessions) }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete sessions');
+      }
+
+      // Remove from list
+      setSessions(sessions.filter(s => !selectedSessions.has(s.id)));
+      setSelectedSessions(new Set());
+    } catch (error) {
+      console.error('Error deleting sessions:', error);
+      alert('Failed to delete sessions. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -397,7 +451,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
                 Filters
-                {(filterStatus !== 'all' || filterAssistant !== 'all') && (
+                {(filterStatus !== 'all' || filterAssistant !== 'all' || filterMessages !== 'all') && (
                   <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                     Active
                   </span>
@@ -409,6 +463,18 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {selectedSessions.size > 0 && (
+                <button
+                  onClick={bulkDeleteSessions}
+                  disabled={isDeleting}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                >
+                  <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  {isDeleting ? 'Deleting...' : `Delete ${selectedSessions.size} Selected`}
+                </button>
+              )}
               <button
                 onClick={downloadFullChats}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -433,7 +499,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
           {/* Collapsible Filters */}
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
                 <div>
                   <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700">
                     Filter by Status
@@ -470,6 +536,22 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                 </div>
 
                 <div>
+                  <label htmlFor="messages-filter" className="block text-sm font-medium text-gray-700">
+                    Filter by Messages
+                  </label>
+                  <select
+                    id="messages-filter"
+                    value={filterMessages}
+                    onChange={(e) => setFilterMessages(e.target.value as any)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="all">All</option>
+                    <option value="empty">Empty (0 messages)</option>
+                    <option value="with_messages">With Messages</option>
+                  </select>
+                </div>
+
+                <div>
                   <label htmlFor="items-per-page" className="block text-sm font-medium text-gray-700">
                     Items per page
                   </label>
@@ -499,6 +581,14 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th scope="col" className="px-6 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={paginatedSessions.length > 0 && selectedSessions.size === paginatedSessions.length}
+                  onChange={toggleSelectAll}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer"
+                />
+              </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Session ID
               </th>
@@ -531,7 +621,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedSessions.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={10} className="px-6 py-12 text-center text-gray-500">
                   No public sessions found.
                 </td>
               </tr>
@@ -541,6 +631,15 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                 const isDeleting = deletingId === session.id;
                 return (
                   <tr key={session.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedSessions.has(session.id)}
+                        onChange={() => toggleSessionSelection(session.id)}
+                        disabled={isDeleting}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer disabled:opacity-50"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-xs font-mono text-gray-500">
                         {session.id.substring(0, 8)}
