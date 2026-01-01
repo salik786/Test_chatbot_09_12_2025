@@ -163,6 +163,7 @@ export interface Database {
           ended_at: string | null;
           last_activity_at: string;
           message_count: number;
+          prolific_id: string | null;
         };
         Insert: {
           id?: string;
@@ -174,6 +175,7 @@ export interface Database {
           ended_at?: string | null;
           last_activity_at?: string;
           message_count?: number;
+          prolific_id?: string | null;
         };
         Update: {
           id?: string;
@@ -185,6 +187,7 @@ export interface Database {
           ended_at?: string | null;
           last_activity_at?: string;
           message_count?: number;
+          prolific_id?: string | null;
         };
       };
     };

@@ -148,6 +148,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
 
         allSessionsData.push({
           sessionId: session.id.substring(0, 8),
+          prolificId: session.prolific_id || 'N/A',
           assistant: assistant?.name || 'Unknown',
           status: session.ended_at ? 'Ended' : 'Active',
           messageCount: session.message_count,
@@ -162,10 +163,10 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
 
     // Create CSV with conversation pairs
     const csvRows = [];
-    csvRows.push(['Session ID', 'Assistant', 'Status', 'Duration', 'Created At', 'User Message', 'Assistant Reply']);
+    csvRows.push(['Session ID', 'Prolific ID', 'Assistant', 'Status', 'Duration', 'Created At', 'User Message', 'Assistant Reply']);
 
     allSessionsData.forEach(sessionData => {
-      const { sessionId, assistant, status, duration, createdAt, messages } = sessionData;
+      const { sessionId, prolificId, assistant, status, duration, createdAt, messages } = sessionData;
 
       // Group messages into conversation pairs
       for (let i = 0; i < messages.length; i++) {
@@ -179,6 +180,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
 
           csvRows.push([
             sessionId,
+            prolificId,
             assistant,
             status,
             duration,
@@ -243,6 +245,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
         allSessionsData.push({
           sessionId: session.id.substring(0, 8),
           fullSessionId: session.id,
+          prolificId: session.prolific_id || 'N/A',
           assistant: assistant?.name || 'Unknown',
           status: session.ended_at ? 'Ended' : 'Active',
           messageCount: session.message_count,
@@ -500,6 +503,9 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                 Session ID
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Prolific ID
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Assistant
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -525,7 +531,7 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
           <tbody className="bg-white divide-y divide-gray-200">
             {paginatedSessions.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                <td colSpan={9} className="px-6 py-12 text-center text-gray-500">
                   No public sessions found.
                 </td>
               </tr>
@@ -538,6 +544,11 @@ export default function PublicSessionsClient({ sessions: initialSessions }: Prop
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-xs font-mono text-gray-500">
                         {session.id.substring(0, 8)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {session.prolific_id || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

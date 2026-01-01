@@ -1,6 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import PublicChatInterface from './PublicChatInterface';
+import PublicChatClient from './PublicChatClient';
 
 interface PageProps {
   params: {
@@ -51,41 +50,12 @@ export default async function PublicChatPage({ params }: PageProps) {
     );
   }
 
-  // Create a NEW session for this visitor
-  const sessionToken = crypto.randomUUID();
-
-  const { data: newSession, error: sessionError } = await supabase
-    .from('public_sessions')
-    .insert({
-      assistant_id: assistant.id,
-      session_token: sessionToken,
-      master_link_token: masterLinkToken,
-    } as any)
-    .select()
-    .single() as { data: any; error: any };
-
-  if (sessionError || !newSession) {
-    console.error('Error creating public session:', sessionError);
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Error
-          </h1>
-          <p className="text-gray-600">
-            Failed to start chat session. Please try again.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // Pass the assistant info to the client component
+  // Session will be created client-side after Prolific ID is collected
   return (
-    <PublicChatInterface
-      sessionId={newSession.id}
-      sessionToken={sessionToken}
-      assistantName="ChatBot"
-      assistantDescription="Your AI assistant ready to help you"
+    <PublicChatClient
+      assistantId={assistant.id}
+      masterLinkToken={masterLinkToken}
     />
   );
 }

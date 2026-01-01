@@ -24,6 +24,7 @@ export default async function PublicSessionsPage() {
     .select(`
       id,
       session_token,
+      prolific_id,
       created_at,
       ended_at,
       last_activity_at,
